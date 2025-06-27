@@ -32,6 +32,7 @@ coverage.xml
 Thumbs.db
 
 .env
+app/.env
 *.key
 *.pem
 secrets.yaml
