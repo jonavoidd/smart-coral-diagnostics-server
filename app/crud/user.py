@@ -1,8 +1,9 @@
 from sqlalchemy import insert, select, delete, update
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from uuid import UUID
+
 import logging
 
 from app.models.users import User
@@ -17,6 +18,7 @@ def create_user(
     email: str,
     password: str,
     provider: str,
+    agree_to_terms: bool,
     age: int,
     role: int = None,
     company: str = None,
@@ -29,7 +31,7 @@ def create_user(
         provider=provider,
         provider_id=None,
         is_verified=False,
-        agree_to_terms=True,
+        agree_to_terms=agree_to_terms,
         age=age,
         role=role,
         is_active=False,
@@ -122,7 +124,6 @@ def update_user_details(
     db: Session,
     id: UUID,
     name: str,
-    password: str,
     provider: str,
     provider_id: str,
     is_verified: bool,
@@ -135,7 +136,6 @@ def update_user_details(
 ):
     new_data = {
         "name": name,
-        "password": password,
         "provider": provider,
         "provider_id": provider_id,
         "is_verified": is_verified,
@@ -172,3 +172,20 @@ def delete_user(db: Session, id: UUID):
         db.rollback()
         logger.error(f"Error deleting user: {e}")
         raise
+
+
+def change_password(db: Session, id: UUID, new_password: str):
+    query = (
+        update(User).where(User.id == id).values(password=new_password).returning(User)
+    )
+
+    try:
+        result = db.execute(query)
+        db.commit()
+
+        updated_user = result.scalar_one_or_none()
+        return updated_user
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error changing password: {e}")
+        return None
