@@ -10,6 +10,7 @@ from app.models import (
     analysis_results,
     analytics_events,
     coral_images,
+    password_reset_tokens,
     terms_agreements,
     user_agreement,
     users,

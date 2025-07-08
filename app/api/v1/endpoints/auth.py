@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -17,23 +17,6 @@ from app.schemas import user
 from app.utils.token import TokenSecurity
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
-@router.get("/index")
-def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
-):
-    payload = TokenSecurity.decode_access_token(token)
-    email = payload.get("sub")
-    if not email:
-        raise HTTPException(status_code=400, detail="invalid token")
-
-    user = get_user_by_email(db, email)
-    if not user:
-        raise HTTPException(status_code=400, detail="user not found")
-
-    return user
 
 
 @router.post("/token", response_model=Token)
@@ -66,7 +49,7 @@ def login(
     if not Hasher.verify_password(form_data.password, user.password):
         raise HTTPException(status_code=400, detail="incorrect email or password")
 
-    access_token = TokenSecurity.create_access_token({"sub": user.email})
+    access_token = TokenSecurity.create_access_token(user.email)
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -107,7 +90,7 @@ def signup(user_data: user.CreateUser, db: Session = Depends(get_db)):
     )
 
     # auto login after signup
-    token = TokenSecurity.create_access_token({"sub": user.email})
+    token = TokenSecurity.create_access_token(user.email)
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -194,17 +177,20 @@ async def social_callback(
                     provider_id=provider_id,
                 )
             else:
-                user = create_social_user(
-                    db=db,
-                    name=name,
-                    email=email,
-                    provider=provider,
-                    provider_id=-provider_id,
-                )
+                user = existing_user
+
+        else:
+            user = create_social_user(
+                db=db,
+                name=name,
+                email=email,
+                provider=provider,
+                provider_id=-provider_id,
+            )
 
             access_token = TokenSecurity.create_access_token({"sub": user.email})
 
-            frontend_url = f"http://localhost:8000/api/v1/auth/callback?token={access_token}&name{user.name}&email={user.email}"
+            frontend_url = f"http://localhost:8000/api/v1/auth/callback?token={access_token}&name={user.name}&email={user.email}"
             return RedirectResponse(frontend_url)
 
     except Exception as e:

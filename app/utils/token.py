@@ -16,17 +16,10 @@ class TokenSecurity:
                 minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
             )
 
-        to_encode = {"exp": expires_delta, "sub": str(subject)}
+        to_encode = {"exp": expires_delta, "sub": subject}
         encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, settings.ALGORITHM)
 
         return encoded_jwt
-
-        # to_encode = data.copy()
-        # expire = datetime.now(timezone.utc) + (
-        #     expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        # )
-        # to_encode.update({"exp": expire})
-        # return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
     def create_refresh_token(
         subject: Union[str, Any], exprires_delta: Optional[timedelta] = None
@@ -47,8 +40,10 @@ class TokenSecurity:
 
     def decode_access_token(token: str) -> Optional[dict]:
         try:
-            return jwt.decode(
+            payload = jwt.decode(
                 token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
             )
+
+            return payload
         except JWTError:
             return None
