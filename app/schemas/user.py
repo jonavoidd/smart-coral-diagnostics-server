@@ -4,6 +4,11 @@ from typing import Optional
 from datetime import datetime
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 class UserBase(BaseModel):
     name: str
     email: EmailStr

@@ -1,5 +1,4 @@
 from sqlalchemy import insert, select, delete, update
-from sqlalchemy.engine import Result
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timezone
@@ -17,38 +16,70 @@ def create_user(
     name: str,
     email: str,
     password: str,
-    agree_to_terms: bool,
+    provider: str,
     age: int,
     role: int = None,
-    is_active: bool = False,
-    last_login: datetime = None,
-    profile: str = None,
     company: str = None,
     position: str = None,
 ):
-    new_user = User(
+    user = User(
         name=name,
         email=email,
         password=password,
-        agree_to_terms=agree_to_terms,
+        provider=provider,
+        provider_id=None,
+        is_verified=False,
+        agree_to_terms=True,
         age=age,
         role=role,
-        is_active=is_active,
-        last_login=last_login,
-        profile=profile,
+        is_active=False,
+        last_login=None,
+        profile=None,
         company=company,
         position=position,
     )
 
     try:
-        db.add(new_user)
+        db.add(user)
         db.commit()
-        db.refresh(new_user)
+        db.refresh(user)
 
-        return new_user
+        return user
     except Exception as e:
         db.rollback()
         logger.error(f"error creating new user: {e}")
+        raise
+
+
+def create_social_user(
+    db: Session, name: str, email: str, provider: str, provider_id: str
+):
+    user = User(
+        name=name,
+        email=email,
+        password=None,
+        age=None,
+        agree_to_terms=True,
+        provider=provider,
+        provider_id=provider_id,
+        is_verified=True,
+        role=2,
+        is_active=False,
+        last_login=None,
+        profile=None,
+        company=None,
+        position=None,
+    )
+
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        return user
+    except Exception as e:
+        db.rollback()
+        logger.error(f"error creating new social user: {e}")
         raise
 
 
@@ -92,6 +123,9 @@ def update_user_details(
     id: UUID,
     name: str,
     password: str,
+    provider: str,
+    provider_id: str,
+    is_verified: bool,
     age: int,
     role: int,
     profile: str,
@@ -102,6 +136,9 @@ def update_user_details(
     new_data = {
         "name": name,
         "password": password,
+        "provider": provider,
+        "provider_id": provider_id,
+        "is_verified": is_verified,
         "age": age,
         "role": role,
         "profile": profile,

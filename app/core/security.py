@@ -6,7 +6,7 @@ password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class Hasher:
     @staticmethod
-    def get_hashed_password(password: str) -> str:
+    def hash_password(password: str) -> str:
         return password_context.hash(password)
 
     @staticmethod
