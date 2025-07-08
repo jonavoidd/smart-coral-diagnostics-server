@@ -1,12 +1,12 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, constr
 from uuid import UUID
 from typing import Optional
 from datetime import datetime
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = constr(min_length=8)
 
 
 class UserBase(BaseModel):
@@ -23,7 +23,7 @@ class UserBase(BaseModel):
 
 class CreateUser(UserBase):
     password: str
-    agree_to_terms: bool
+    agree_to_terms: bool = True
 
 
 class UpdateUser(UserBase):
