@@ -1,5 +1,6 @@
 import aiosmtplib
 import logging
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from jinja2 import Template
@@ -203,8 +204,6 @@ class EmailService:
         © {{ current_year }} {{ app_name }}. All rights reserved.
         """
 
-        from datetime import datetime
-
         template_vars = {
             "name": name,
             "reset_url": reset_url,
@@ -298,8 +297,6 @@ class EmailService:
         </html>
         """
 
-        from datetime import datetime, timezone
-
         template_vars = {
             "name": name,
             "app_name": settings.APP_NAME,
@@ -313,6 +310,167 @@ class EmailService:
 
         return await self.send_email(
             to_email=email, subject=subject, html_content=html_content, to_name=name
+        )
+
+    async def send_verification_email(
+        self, email: str, name: str, verification_url: str, expires_mins: int
+    ) -> bool:
+        subject = "Email Confirmation"
+
+        html_template = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verify Your Email</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #2c3e50;
+                    background-color: #eaf6fb;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                .container {
+                    background-color: #ffffff;
+                    padding: 30px;
+                    border-radius: 10px;
+                    border: 1px solid #cce7f0;
+                    box-shadow: 0 4px 10px rgba(0, 123, 255, 0.1);
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 30px;
+                }
+                .logo {
+                    font-size: 26px;
+                    font-weight: bold;
+                    color: #0077b6;
+                }
+                .content {
+                    background-color: #f0faff;
+                    padding: 25px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                }
+                h2 {
+                    color: #0077b6;
+                }
+                .button {
+                    display: inline-block;
+                    background-color: #00b4d8;
+                    color: white;
+                    padding: 12px 30px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                    margin: 20px 0;
+                    transition: background-color 0.3s ease;
+                }
+                .button:hover {
+                    background-color: #0096c7;
+                }
+                .footer {
+                    text-align: center;
+                    margin-top: 30px;
+                    font-size: 12px;
+                    color: #666;
+                }
+                .warning {
+                    background-color: #fff3cd;
+                    border: 1px solid #ffeaa7;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                    color: #856404;
+                }
+                .link-fallback {
+                    word-break: break-word;
+                    background-color: #e3f2fd;
+                    padding: 10px;
+                    border-radius: 3px;
+                    font-family: monospace;
+                    font-size: 12px;
+                    color: #0d47a1;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">{{ app_name }}</div>
+                </div>
+
+                <div class="content">
+                    <h2>Verify Your Email</h2>
+
+                    <p>Hello {{ name }},</p>
+
+                    <p>Thank you for signing up! Please confirm your email address by clicking the button below:</p>
+
+                    <div style="text-align: center;">
+                        <a href="{{ verification_url }}" class="button">Verify Email</a>
+                    </div>
+
+                    <div class="warning">
+                        <strong>⚠️ Note:</strong> This link will expire in {{ expires_minutes }} minutes for security reasons.
+                    </div>
+
+                    <p>If the button doesn’t work, copy and paste this link into your browser:</p>
+                    <div class="link-fallback">{{ verification_url }}</div>
+
+                    <p>Welcome aboard!<br>The {{ app_name }} Team</p>
+                </div>
+
+                <div class="footer">
+                    <p>This is an automated email. Please do not reply to this message.</p>
+                    <p>&copy; {{ current_year }} {{ app_name }}. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_template = """
+        Verify Your Email - {{ app_name }}
+
+        Hello {{ name }},
+
+        Thank you for signing up! Please confirm your email address by clicking the link below:
+
+        {{ verification_url }}
+
+        ⚠️ Note: This link will expire in {{ expires_minutes }} minutes for security reasons.
+
+        Welcome aboard!
+
+        The {{ app_name }} Team
+
+        ---
+        This is an automated email. Please do not reply to this message.
+        © {{ current_year }} {{ app_name }}. All rights reserved.
+        """
+
+        template_vars = {
+            "name": name,
+            "app_name": settings.APP_NAME,
+            "verification_url": verification_url,
+            "expires_minutes": expires_mins,
+            "current_year": datetime.now().year,
+        }
+
+        html_content = Template(html_template).render(**template_vars)
+        text_content = Template(text_template).render(**template_vars)
+
+        return await self.send_email(
+            to_email=email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+            to_name=name,
         )
 
 
@@ -329,3 +487,11 @@ async def send_password_reset_email(
 
 async def send_password_changed_confirmation(email: str, name: str) -> bool:
     return await email_service.send_password_changed_confirmation(email, name)
+
+
+async def send_verification_email(
+    email: str, name: str, verification_url: str, expires_mins: int
+):
+    return await email_service.send_verification_email(
+        email, name, verification_url, expires_mins
+    )

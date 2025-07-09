@@ -54,6 +54,10 @@ class User(Base):
         "PasswordResetToken", back_populates="user", cascade="all, delete-orphan"
     )
 
+    verification_tokens = relationship(
+        "VerificationToken", back_populates="user", cascade="all, delete-orphan"
+    )
+
     __table_args__ = (
         UniqueConstraint("provider", "provider_id", name="unique_provider_user"),
         Index("idx_users_on_id", "id"),

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60
 
     MAIL_USERNAME: str = "kula.gozano.swu@phinmaed.com"
     MAIL_FROM_NAME: str = "Coraline"

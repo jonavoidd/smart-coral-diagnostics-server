@@ -1,12 +1,12 @@
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 
-from app.core.auth import get_current_user
+from app.core.auth import require_role
 from app.db.connection import get_db
-from app.schemas.password_reset import ForgotPasswordRequest, PasswordChangeRequest
+from app.models.users import UserRole
+from app.schemas.password_reset import PasswordChangeRequest
 from app.schemas.user import CreateUser, UpdateUser, UserOut
 from app.services.user_service import user_service
 
@@ -55,7 +55,7 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
 def get_user_by_id(
     id: UUID,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(get_current_user),
+    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
 ):
     """
     Retrieves a user by their UUID.
@@ -100,7 +100,7 @@ def update_user_details(
     id: UUID,
     payload: UpdateUser,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(get_current_user),
+    current_user: UserOut = Depends(require_role([UserRole.USER])),
 ):
     """
     Updates an existing user's information by ID.
@@ -130,7 +130,7 @@ def update_user_details(
 def delete_user(
     id: UUID,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(get_current_user),
+    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
 ):
     """
     Deletes a user by their UUID.
@@ -160,7 +160,7 @@ async def update_password(
     id: UUID,
     payload: PasswordChangeRequest,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(get_current_user),
+    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
 ):
     """
     Updates the password of the user with the given ID.

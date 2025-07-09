@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+import secrets
+
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.oauth import oauth
 from app.core.security import Hasher
 from app.crud.user import (
@@ -11,9 +15,11 @@ from app.crud.user import (
     create_social_user,
     update_user_details,
 )
+from app.crud.verify_token import get_verification_token, store_verification_token
 from app.db.connection import get_db
 from app.schemas.token import Token
 from app.schemas import user
+from app.services.email_service import send_verification_email
 from app.utils.token import TokenSecurity
 
 router = APIRouter()
@@ -46,6 +52,11 @@ def login(
             status_code=400, detail="please use social login for this acccount"
         )
 
+    if not user.is_verified:
+        return HTTPException(
+            status=status.HTTP_403_FORBIDDEN, detail="please verify your email first"
+        )
+
     if not Hasher.verify_password(form_data.password, user.password):
         raise HTTPException(status_code=400, detail="incorrect email or password")
 
@@ -59,7 +70,7 @@ def login(
 
 
 @router.post("/signup", response_model=Token)
-def signup(user_data: user.CreateUser, db: Session = Depends(get_db)):
+async def signup(user_data: user.CreateUser, db: Session = Depends(get_db)):
     """
     Register a new user with the provided details, then return an access token for immediate login.
 
@@ -87,6 +98,24 @@ def signup(user_data: user.CreateUser, db: Session = Depends(get_db)):
         provider="local",
         age=user_data.age,
         agree_to_terms=user_data.agree_to_terms,
+    )
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.VERIFICATION_TOKEN_EXPIRE_MINUTES
+    )
+
+    stored = store_verification_token(db, user.id, token, expires_at)
+    if not stored:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to store verification token",
+        )
+
+    verification_url = f"{settings.FRONTEND_URL}/email-verify?token={token}"
+
+    await send_verification_email(
+        user_data.email, user_data.name, verification_url, expires_at
     )
 
     # auto login after signup
@@ -195,3 +224,14 @@ async def social_callback(
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Authentication failed: {str(e)}")
+
+
+# Verify Email
+@router.get("/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    verification_token = get_verification_token(db, token)
+
+    if not verification_token:
+        return RedirectResponse(f"{settings.FRONTEND_URL}/email-verify-failed")
+
+    return RedirectResponse(f"{settings.FRONTEND_URL}/email-verify-success")
