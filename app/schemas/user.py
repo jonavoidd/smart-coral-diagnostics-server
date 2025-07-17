@@ -1,50 +1,97 @@
-from pydantic import BaseModel, EmailStr, constr
+from datetime import datetime, date
+from pydantic import BaseModel, EmailStr, StringConstraints, constr
+from typing import Annotated, List, Optional
 from uuid import UUID
-from typing import Optional
-from datetime import datetime
+
+PasswordStr = Annotated[str, StringConstraints(min_length=8)]
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str = constr(min_length=8)
+    password: PasswordStr
 
 
 class UserBase(BaseModel):
-    name: str
+    first_name: str
+    last_name: Optional[str] = None
     email: EmailStr
-    age: int
+    provider: Optional[str] = "local"
+    provider_id: Optional[str] = None
+    contact_number: Optional[str] = None
+
+    agree_to_terms: bool
+    subscribe_to_newsletter: Optional[bool] = False
+
+    city: Optional[str] = None
+    country: Optional[str] = None
+
+    birthdate: date
+    bio: Optional[str] = None
+    experience: Optional[str] = None
+    diving_certification: Optional[str] = None
+    research_experience: Optional[str] = None
+
+    organization: Optional[str] = None
+    position: Optional[str] = None
+
+    primary_interests: Optional[List[str]] = []
+    contribution_types: Optional[List[str]] = []
+
     role: Optional[int] = None
     profile: Optional[str] = None
-    company: Optional[str] = None
-    position: Optional[str] = None
-    created_at: datetime = None
-    updated_at: datetime = None
+
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 class CreateUser(UserBase):
-    password: str
-    agree_to_terms: bool = True
+    password: PasswordStr
 
 
 class UpdateUser(UserBase):
-    name: Optional[str] = None
-    password: Optional[str] = None
-    age: Optional[int] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: PasswordStr
+    provider: Optional[str] = None
+    provider_id: Optional[str] = None
+    contact_number: Optional[str] = None
+
+    agree_to_terms: Optional[bool] = None
+    subscribe_to_newsletter: Optional[bool] = None
+
+    city: Optional[str] = None
+    country: Optional[str] = None
+
+    birthdate: Optional[date] = None
+    bio: Optional[str] = None
+    experience: Optional[str] = None
+    diving_certification: Optional[str] = None
+    research_experience: Optional[str] = None
+
+    organization: Optional[str] = None
+    position: Optional[str] = None
+
+    primary_interests: Optional[List[str]] = None
+    contribution_types: Optional[List[str]] = None
+
     role: Optional[int] = None
     profile: Optional[str] = None
-    company: Optional[str] = None
-    position: Optional[str] = None
+    is_verified: Optional[bool] = None
     is_active: Optional[bool] = None
+
+    updated_at: Optional[datetime] = None
 
 
 class UserOut(UserBase):
     id: UUID
-    is_active: bool = False
+    is_verified: Optional[bool] = False
+    is_active: Optional[bool] = False
     last_login: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserInDB(UserOut):
-    password: str
+    password: PasswordStr

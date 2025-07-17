@@ -1,10 +1,11 @@
 import aiosmtplib
 import logging
+
 from datetime import datetime, timezone
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from jinja2 import Template
-from typing import Optional
+from typing import Optional, List
 
 from app.core.config import settings
 
@@ -416,7 +417,7 @@ class EmailService:
                     </div>
 
                     <div class="warning">
-                        <strong>⚠️ Note:</strong> This link will expire in {{ expires_minutes }} minutes for security reasons.
+                        <strong>⚠️ Note:</strong> This link will expire in 60 minutes for security reasons.
                     </div>
 
                     <p>If the button doesn’t work, copy and paste this link into your browser:</p>
@@ -443,7 +444,7 @@ class EmailService:
 
         {{ verification_url }}
 
-        ⚠️ Note: This link will expire in {{ expires_minutes }} minutes for security reasons.
+        ⚠️ Note: This link will expire in 24 hours minutes for security reasons.
 
         Welcome aboard!
 
@@ -473,6 +474,153 @@ class EmailService:
             to_name=name,
         )
 
+    async def send_web_update_email_to_admins(
+        self, emails: List[str], name: str, title: str, content: str
+    ) -> bool:
+        subject = "Website Content Updates"
+
+        html_template = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Website Content Updated</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #2c3e50;
+                    background-color: #eaf6fb;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }
+                .container {
+                    background-color: #ffffff;
+                    padding: 30px;
+                    border-radius: 10px;
+                    border: 1px solid #cce7f0;
+                    box-shadow: 0 4px 10px rgba(0, 123, 255, 0.1);
+                }
+                .header {
+                    text-align: center;
+                    margin-bottom: 30px;
+                }
+                .logo {
+                    font-size: 26px;
+                    font-weight: bold;
+                    color: #0077b6;
+                }
+                .content {
+                    background-color: #f0faff;
+                    padding: 25px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                }
+                h2 {
+                    color: #0077b6;
+                }
+                .update-title {
+                    font-weight: bold;
+                    font-size: 18px;
+                    margin-bottom: 10px;
+                }
+                .update-body {
+                    background-color: #ffffff;
+                    padding: 15px;
+                    border-radius: 6px;
+                    border: 1px solid #cce7f0;
+                    white-space: pre-wrap;
+                }
+                .footer {
+                    text-align: center;
+                    margin-top: 30px;
+                    font-size: 12px;
+                    color: #666;
+                }
+                .note {
+                    background-color: #e0f7fa;
+                    border-left: 5px solid #00acc1;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                    color: #006064;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">{{ app_name }}</div>
+                </div>
+
+                <div class="content">
+                    <h2>Website Content Updated</h2>
+
+                    <p>Hello {{ name }},</p>
+
+                    <p>The following update has been made to the {{ app_name }} website:</p>
+
+                    <div class="update-title">{{ update_title }}</div>
+                    <div class="update-body">{{ update_content }}</div>
+
+                    <div class="note">
+                        <strong>ℹ️ Note:</strong> This update was sent to all admin users to ensure awareness and transparency.
+                    </div>
+
+                    <p>Thank you for staying updated.<br>The {{ app_name }} Team</p>
+                </div>
+
+                <div class="footer">
+                    <p>This is an automated email. Please do not reply to this message.</p>
+                    <p>&copy; {{ current_year }} {{ app_name }}. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_template = """
+        Website Content Updated - {{ app_name }}
+
+        Hello {{ name }},
+
+        The following update has been made to the {{ app_name }} website:
+
+        Title: {{ update_title }}
+
+        {{ update_content }}
+
+        ℹ️ Note: This update was sent to all admin users.
+
+        Thank you for staying informed.
+
+        The {{ app_name }} Team
+
+        ---
+        This is an automated email. Please do not reply to this message.
+        © {{ current_year }} {{ app_name }}. All rights reserved.
+        """
+
+        template_vars = {
+            "app_name": settings.APP_NAME,
+            "name": name,
+            "updated_title": title,
+            "updated_content": content,
+            "time_updated": datetime.now(timezone.utc),
+        }
+
+        html_content = Template(html_template).render(**template_vars)
+        text_content = Template(text_template).render(**template_vars)
+
+        return await self.send_email(
+            to_email=emails,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+        )
+
 
 email_service = EmailService()
 
@@ -494,4 +642,12 @@ async def send_verification_email(
 ):
     return await email_service.send_verification_email(
         email, name, verification_url, expires_mins
+    )
+
+
+async def send_web_update_email_to_admins(
+    emails: List[str], name: str, title: str, content: str
+) -> bool:
+    return await email_service.send_web_update_email_to_admins(
+        emails, name, title, content
     )

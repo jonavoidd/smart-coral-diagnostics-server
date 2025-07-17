@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 from pathlib import Path
+from typing import Optional
 
 # load .env from the project root
 env_path = Path(__file__).resolve().parent.parent.parent / ".env"
@@ -10,6 +11,7 @@ load_dotenv(dotenv_path=env_path)
 class Settings(BaseSettings):
     APP_NAME: str
     FRONTEND_URL: str
+    BACKEND_URL: str
 
     SUPABASE_URL: str
     SUPABASE_SERVICE_ROLE_KEY: str
@@ -22,7 +24,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
 
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
-    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60
+    VERIFICATION_TOKEN_EXPIRE_HOURS: int = 60
 
     MAIL_USERNAME: str = "kula.gozano.swu@phinmaed.com"
     MAIL_FROM_NAME: str = "Coraline"
@@ -32,6 +34,16 @@ class Settings(BaseSettings):
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_USE_TLS: bool = True
     MAIL_USE_SSL: bool = False
+
+    BLEACHING_MODEL_NAME: str = "microsoft/resnet-50"
+    BLEACHING_MODEL_CACHE_DIR: str = "./models_cache"
+    BLEACHING_CONFIDENCE_THRESHOLD: float = 0.7
+    MODEL_DEVICE: str = "cpu"
+
+    CUSTOM_BLEACHING_MODEL_PATH: Optional[str] = None
+
+    HF_MODEL_NAME: str
+    HF_USERNAME: str
 
     class config:
         case_sensitive = True

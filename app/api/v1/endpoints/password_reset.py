@@ -24,12 +24,12 @@ async def send_password_request(
     """
     Initiates a password reset request by sending a reset token to the user.
 
-    Args:
+    <b>Args</b>:
         payload (ForgotPasswordRequest): The request containing user information and
                                           the email address to initiate the reset.
         db (Session): The database session for interaction with the database.
 
-    Returns:
+    <b>Returns</b>:
         RequestResponse: A response indicating whether the password reset request was
                          successfully initiated.
     """
@@ -42,12 +42,12 @@ def validate_reset_token(payload: GetToken, db: Session = Depends(get_db)):
     """
     Validates a reset token to ensure it's valid for a password reset.
 
-    Args:
+    <b>Args</b>:
         payload (ResetPasswordRequest): The request containing the reset token
                                         to be validated.
         db (Session): The database session for interaction with the database.
 
-    Returns:
+    <b>Returns</b>:
         RequestResponse: A response indicating whether the reset token is valid.
     """
 
@@ -59,12 +59,12 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     """
     Resets the user's password using a valid reset token.
 
-    Args:
+    <b>Args</b>:
         payload (ResetPasswordRequest): The request containing the new password
                                         and the reset token.
         db (Session): The database session for interaction with the database.
 
-    Returns:
+    <b>Returns</b>:
         RequestResponse: A response indicating whether the password reset was
                          successful.
     """
@@ -77,10 +77,10 @@ def cleanup_expired_token(db: Session = Depends(get_db)):
     """
     Cleans up expired password reset tokens from the database.
 
-    Args:
+    <b>Args</b>:
         db (Session): The database session for interaction with the database.
 
-    Returns:
+    <b>Returns</b>:
         Response: A confirmation of the expired token cleanup.
     """
 
@@ -92,11 +92,11 @@ def revoke_user_tokens(id: UUID, db: Session = Depends(get_db)):
     """
     Revokes all password reset tokens for a specific user identified by their ID.
 
-    Args:
+    <b>Args</b>:
         id (UUID): The UUID of the user whose tokens will be revoked.
         db (Session): The database session for interaction with the database.
 
-    Returns:
+    <b>Returns</b>:
         Response: A confirmation of token revocation for the user.
     """
 

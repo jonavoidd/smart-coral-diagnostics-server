@@ -69,8 +69,10 @@ class PasswordResetService:
 
             reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
 
+            name = f"{user.first_name} {user.last_name}"
+
             await email_service.send_password_reset_email(
-                user.email, user.name, reset_url, expires_at
+                user.email, name, reset_url, expires_at
             )
 
             logger.info(f"Service: password reset initiated for user: {user}")

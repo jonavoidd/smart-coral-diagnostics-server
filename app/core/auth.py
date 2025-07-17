@@ -6,6 +6,7 @@ from fastapi.security import (
     HTTPAuthorizationCredentials,
 )
 from jose import jwt, JWTError
+from typing import List
 from uuid import UUID
 
 from app.db.connection import get_db
@@ -19,7 +20,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
-    detail="could not validate crendentials",
+    detail="could not validate credentials",
     headers={"WWW-Authenticate": "Bearer"},
 )
 
@@ -60,7 +61,7 @@ async def get_current_user(
     return user
 
 
-def require_role(allowed_roles: list[UserRole]):
+def require_role(allowed_roles: List[UserRole]):
     def role_checker(id: UUID, current_user: UserOut = Depends(get_current_user)):
         if current_user.id == id:
             return current_user
