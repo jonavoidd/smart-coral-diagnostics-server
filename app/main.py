@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import time
 
 from app.api.v1.router import api_router
+from app.core.auth import get_current_user
+from app.schemas.user import UserOut
 
 
 app = FastAPI()
@@ -31,3 +33,8 @@ async def middleware(request: Request, call_next):
 @app.get("/")
 async def root():
     return {"message": "Welcome to the API"}
+
+
+@app.get("/api/v1/me")
+async def get_me(current_user: UserOut = Depends(get_current_user)):
+    return current_user
