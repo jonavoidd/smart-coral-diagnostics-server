@@ -17,6 +17,7 @@ from app.models import (
     user_agreement,
     users,
     verification_tokens,
+    website_content,
 )
 
 # this is the Alembic Config object, which provides

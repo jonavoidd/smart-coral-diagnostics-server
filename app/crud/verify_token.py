@@ -1,7 +1,8 @@
 import logging
 
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import insert, select, update, delete, and_, or_
+from sqlalchemy import select, update, delete, and_, or_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
@@ -30,7 +31,7 @@ def store_verification_token(
         db.refresh(verification_token)
 
         return True
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"{LOG_MSG} error storing verification token")
         return False
@@ -63,7 +64,7 @@ def get_verification_token(db: Session, token: str) -> Optional[VerificationToke
             db.commit()
 
         return token if success else None
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"{LOG_MSG} error getting verification token: {str(e)}")
         raise
@@ -80,7 +81,7 @@ def verify_user(db: Session, id: UUID) -> bool:
         db.commit()
 
         return True
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"{LOG_MSG} error verifying user: {str(e)}")
         return False
@@ -100,7 +101,7 @@ def cleanup_user_verification_token(db: Session, id: UUID) -> bool:
         db.commit()
 
         return True
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"{LOG_MSG} error deleting tokens: {str(e)}")
         return False
@@ -119,7 +120,7 @@ def cleanup_verification_tokens(db: Session) -> bool:
         db.commit()
 
         return True
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"{LOG_MSG} error deleting tokens: {e}")
         return False
