@@ -2,6 +2,7 @@ import logging
 
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import insert, select, update, delete, and_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
@@ -41,7 +42,7 @@ def store_reset_token(db: Session, id: UUID, token: str, expires_at: datetime) -
         db.refresh(reset_token)
 
         return True
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error storing reset tokens: {e}")
         raise
@@ -75,7 +76,7 @@ def get_reset_token(db: Session, token: str) -> Optional[PasswordResetToken]:
         token = result.scalar_one_or_none()
 
         return token
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Error getting the reset token: {e}")
         raise
 
@@ -107,7 +108,7 @@ def mark_reset_token_as_used(db: Session, token: str) -> bool:
             return True
         else:
             return False
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error updating reset_token: {e}")
         raise
@@ -137,7 +138,7 @@ def cleanup_user_token(db: Session, id: UUID) -> bool:
         db.commit()
 
         return True
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error deleting token: {e}")
         return False
@@ -163,7 +164,7 @@ def cleanup_expired_token(db: Session) -> bool:
         db.commit()
 
         return True
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"Error deleting token: {e}")
         return False

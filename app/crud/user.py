@@ -1,44 +1,25 @@
-from sqlalchemy import insert, select, delete, update
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
-from uuid import UUID
-
 import logging
 
-from app.models.users import User
-from app.db.connection import engine
+from sqlalchemy import select, delete, update, or_
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+from typing import Optional, List
+from uuid import UUID
+
+from app.models.users import User, UserRole
+from app.schemas.user import CreateUser, UpdateUser, UserOut
 
 logger = logging.getLogger(__name__)
+LOG_MSG = "Crud:"
 
 
 def create_user(
-    db: Session,
-    name: str,
-    email: str,
-    password: str,
-    provider: str,
-    agree_to_terms: bool,
-    age: int,
-    role: int = None,
-    company: str = None,
-    position: str = None,
-):
+    db: Session, payload: CreateUser, hashed_password: str
+) -> Optional[UserOut]:
     user = User(
-        name=name,
-        email=email,
-        password=password,
-        provider=provider,
-        provider_id=None,
-        is_verified=False,
-        agree_to_terms=agree_to_terms,
-        age=age,
-        role=role,
-        is_active=False,
-        last_login=None,
-        profile=None,
-        company=company,
-        position=position,
+        **payload.model_dump(exclude={"password", "provider"}),
+        password=hashed_password,
+        provider="local",
     )
 
     try:
@@ -49,28 +30,32 @@ def create_user(
         return user
     except Exception as e:
         db.rollback()
-        logger.error(f"error creating new user: {e}")
+        logger.error(f"{LOG_MSG} error creating new user: {str(e)}")
         raise
 
 
 def create_social_user(
-    db: Session, name: str, email: str, provider: str, provider_id: str
-):
+    db: Session,
+    first_name: str,
+    last_name: str,
+    email: str,
+    provider: str,
+    provider_id: str,
+) -> Optional[UserOut]:
     user = User(
-        name=name,
+        first_name=first_name,
+        last_name=last_name,
         email=email,
         password=None,
-        age=None,
+        birthdate=None,
         agree_to_terms=True,
         provider=provider,
         provider_id=provider_id,
         is_verified=True,
-        role=2,
+        role=1,
         is_active=False,
         last_login=None,
         profile=None,
-        company=None,
-        position=None,
     )
 
     try:
@@ -79,13 +64,13 @@ def create_social_user(
         db.refresh(user)
 
         return user
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"error creating new social user: {e}")
+        logger.error(f"{LOG_MSG} error creating new social user: {str(e)}")
         raise
 
 
-def get_user_by_email(db: Session, email: str):
+def get_user_by_email(db: Session, email: str) -> Optional[UserOut]:
     query = select(User).where(User.email == email)
 
     try:
@@ -94,11 +79,11 @@ def get_user_by_email(db: Session, email: str):
 
         return user
     except SQLAlchemyError as e:
-        logger.error(f"database error occured: {e}")
+        logger.error(f"{LOG_MSG} database error occurred: {str(e)}")
         return None
 
 
-def get_user_by_id(db: Session, id: UUID):
+def get_user_by_id(db: Session, id: UUID) -> Optional[UserOut]:
     query = select(User).where(User.id == id)
 
     try:
@@ -107,60 +92,50 @@ def get_user_by_id(db: Session, id: UUID):
 
         return user
     except SQLAlchemyError as e:
-        logger.error(f"database error occured: {e}")
+        logger.error(f"{LOG_MSG} database error occurred: {str(e)}")
         return None
 
 
-def get_all_users(db: Session):
+def get_all_users(db: Session) -> Optional[List[UserOut]]:
     try:
         users = db.query(User).all()
         return users
     except SQLAlchemyError as e:
-        logger.error(f"database error occured: {e}")
+        logger.error(f"{LOG_MSG} database error occurred: {str(e)}")
         return None
 
 
-def update_user_details(
-    db: Session,
-    id: UUID,
-    name: str,
-    provider: str,
-    provider_id: str,
-    is_verified: bool,
-    age: int,
-    role: int,
-    profile: str,
-    company: str,
-    position: str,
-    updated_at: datetime = None,
-):
-    new_data = {
-        "name": name,
-        "provider": provider,
-        "provider_id": provider_id,
-        "is_verified": is_verified,
-        "age": age,
-        "role": role,
-        "profile": profile,
-        "company": company,
-        "position": position,
-        "updated_at": updated_at or datetime.now(timezone.utc),
-    }
+def get_all_admin(db: Session) -> Optional[List[UserOut]] | None:
+    query = select(User).where(
+        or_(User.role == UserRole.ADMIN, User.role == UserRole.SUPER_ADMIN)
+    )
+
+    try:
+        result = db.execute(query)
+        admins = result.scalars().all()
+
+        return admins
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting all admin: {str(e)}")
+        return None
+
+
+def update_user_details(db: Session, payload: UpdateUser) -> Optional[UserOut] | None:
+    new_data = payload.model_dump(exclude_unset=True)
     query = update(User).where(User.id == id).values(**new_data).returning(User)
 
     try:
-        db.execute(query)
+        result = db.execute(query)
         db.commit()
-        updated_user = db.query(User).filter(User.id == id).one_or_none()
 
-        return updated_user
-    except Exception as e:
+        return result.scalar_one_or_none()
+    except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Error updating user data: {e}")
+        logger.error(f"{LOG_MSG} error updating user data: {str(e)}")
         raise
 
 
-def delete_user(db: Session, id: UUID):
+def delete_user(db: Session, id: UUID) -> bool:
     query = delete(User).where(User.id == id)
 
     try:
@@ -168,13 +143,13 @@ def delete_user(db: Session, id: UUID):
         db.commit()
 
         return result.rowcount > 0
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Error deleting user: {e}")
+        logger.error(f"{LOG_MSG} error deleting user: {str(e)}")
         raise
 
 
-def change_password(db: Session, id: UUID, new_password: str):
+def change_password(db: Session, id: UUID, new_password: str) -> Optional[UserOut]:
     query = (
         update(User).where(User.id == id).values(password=new_password).returning(User)
     )
@@ -185,7 +160,7 @@ def change_password(db: Session, id: UUID, new_password: str):
 
         updated_user = result.scalar_one_or_none()
         return updated_user
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Error changing password: {e}")
+        logger.error(f"{LOG_MSG} error changing password: {str(e)}")
         return None

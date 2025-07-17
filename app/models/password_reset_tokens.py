@@ -10,7 +10,11 @@ from app.db.connection import Base
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
     id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     token = Column(String(255), nullable=False, unique=True, index=True)
     expires_at = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, server_default=func.now())

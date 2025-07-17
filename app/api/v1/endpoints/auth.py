@@ -32,24 +32,28 @@ def login(
     """
     Authenticate a user using email and password, and return an access token if successful.
 
-    Args:
+    <b>Args</b>:
         form_data (OAuth2PasswordRequestForm): The login credentials containing 'username' (email) and 'password'.
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         dict: A dictionary containing the access token, token type, user's name, and email.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If the user is not found, uses a non-local provider, or the password is incorrect.
     """
 
     user = get_user_by_email(db, form_data.username)
     if not user:
-        raise HTTPException(status_code=400, detail="incorrect email or password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="incorrect email or password",
+        )
 
     if user.provider != "local":
         raise HTTPException(
-            status_code=400, detail="please use social login for this acccount"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="please use social login for this acccount",
         )
 
     if not user.is_verified:
@@ -58,15 +62,30 @@ def login(
         )
 
     if not Hasher.verify_password(form_data.password, user.password):
-        raise HTTPException(status_code=400, detail="incorrect email or password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="incorrect email or password",
+        )
+
+    name = f"{user.first_name} {user.last_name}"
 
     access_token = TokenSecurity.create_access_token(user.email)
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "name": user.name,
-        "email": user.email,
-    }
+    response = JSONResponse(
+        content={
+            "message": "login successful",
+            "access_token": access_token,
+            "name": name,
+            "email": user.email,
+        }
+    )
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+    return response
 
 
 @router.post("/signup", response_model=Token)
@@ -74,58 +93,67 @@ async def signup(user_data: user.CreateUser, db: Session = Depends(get_db)):
     """
     Register a new user with the provided details, then return an access token for immediate login.
 
-    Args:
+    <b>Args</b>:
         user_data (user.CreateUser): The new user's registration data, including name, email, password, age, and agreement to terms.
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         dict: A dictionary containing the access token, token type, user's name, and email.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If an account with the given email already exists.
     """
 
     existing_user = get_user_by_email(db, user_data.email)
     if existing_user:
-        raise HTTPException(status_code=400, detail="account already exists")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="account already exists"
+        )
 
     hashed_pwd = Hasher.hash_password(user_data.password)
     user = create_user(
         db,
-        name=user_data.name,
-        email=user_data.email,
-        password=hashed_pwd,
-        provider="local",
-        age=user_data.age,
-        agree_to_terms=user_data.agree_to_terms,
+        payload=user_data,
+        hashed_password=hashed_pwd,
     )
 
-    token = secrets.token_urlsafe(32)
+    verification_token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.VERIFICATION_TOKEN_EXPIRE_MINUTES
+        hours=settings.VERIFICATION_TOKEN_EXPIRE_HOURS
     )
 
-    stored = store_verification_token(db, user.id, token, expires_at)
+    stored = store_verification_token(db, user.id, verification_token, expires_at)
     if not stored:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to store verification token",
         )
 
-    verification_url = f"{settings.FRONTEND_URL}/email-verify?token={token}"
-
-    await send_verification_email(
-        user_data.email, user_data.name, verification_url, expires_at
+    verification_url = (
+        f"{settings.BACKEND_URL}/api/v1/auth/verify-email?token={verification_token}"
     )
 
+    name = f"{user_data.first_name} {user_data.last_name or ''}".strip()
+    await send_verification_email(user_data.email, name, verification_url, expires_at)
+
     # auto login after signup
-    token = TokenSecurity.create_access_token(user.email)
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "name": user.name,
-        "email": user.email,
-    }
+    access_token = TokenSecurity.create_access_token(user.email)
+    response = JSONResponse(
+        content={
+            "message": "login successful",
+            "access_token": access_token,
+            "name": name,
+            "email": user.email,
+        }
+    )
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+    return response
 
 
 @router.get("/auth/{provider}")
@@ -133,19 +161,21 @@ async def social_auth(provider: str, request: Request):
     """
     Initiates OAuth2 authorization flow with the specified social provider.
 
-    Args:
+    <b>Args</b>:
         provider (str): The name of the social login provider (currently only 'google' is supported).
         request (Request): The incoming HTTP request, used to generate the redirect URI.
 
-    Returns:
+    <b>Returns</b>:
         Response: A redirect response to the provider's OAuth2 authorization URL.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If the provider is not supported.
     """
 
     if provider not in ["google"]:
-        raise HTTPException(status_code=400, detail="unsupported provider")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported provider"
+        )
 
     client = oauth.create_client(provider)
     redirect_uri = request.url_for("social_callback", provider=provider)
@@ -159,15 +189,15 @@ async def social_callback(
     """
     Handles the OAuth2 callback from a social provider, retrieves user info, and logs the user in.
 
-    Args:
+    <b>Args</b>:
         provider (str): The name of the social login provider (e.g., 'google').
         request (Request): The HTTP request containing the authorization response from the provider.
         db (Session): The SQLAlchemy database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         RedirectResponse: Redirects the user to the frontend with an access token as query parameters.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If the authentication fails, the provider is unsupported,
                        or user information (like email) is not provided.
     """
@@ -191,7 +221,8 @@ async def social_callback(
 
         if not email:
             raise HTTPException(
-                status_code=400, detail="email not provided by social platform provider"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="email not provided by social platform provider",
             )
 
         existing_user = get_user_by_email(db, email)
@@ -223,7 +254,10 @@ async def social_callback(
             return RedirectResponse(frontend_url)
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Authentication failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Authentication failed: {str(e)}",
+        )
 
 
 # Verify Email
@@ -232,6 +266,6 @@ def verify_email(token: str, db: Session = Depends(get_db)):
     verification_token = get_verification_token(db, token)
 
     if not verification_token:
-        return RedirectResponse(f"{settings.FRONTEND_URL}/email-verify-failed")
+        return RedirectResponse(f"{settings.FRONTEND_URL}/verify-email?status=failed")
 
-    return RedirectResponse(f"{settings.FRONTEND_URL}/email-verify-success")
+    return RedirectResponse(f"{settings.FRONTEND_URL}/verify-email?status=succeeded")

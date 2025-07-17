@@ -1,5 +1,8 @@
-from fastapi import Depends, HTTPException
+import logging
+
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List, Dict
 from uuid import UUID
 
 from app.core.security import Hasher
@@ -10,8 +13,12 @@ from app.schemas.password_reset import PasswordChangeRequest
 from app.services.email_service import email_service
 
 
+logger = logging.getLogger(__name__)
+LOG_MSG = "Service:"
+
+
 class UserService:
-    def create_user_service(self, user_data: CreateUser, db: Session):
+    def create_user_service(self, user_data: CreateUser, db: Session) -> Dict[str, str]:
         """
         Creates a new user in the database.
 
@@ -56,7 +63,7 @@ class UserService:
         user_details = user_crud.get_user_by_id(db, id)
         return user_details
 
-    def get_all_users_service(self, db: Session) -> list[UserOut]:
+    def get_all_users_service(self, db: Session) -> List[UserOut]:
         """
         Retrieves a list of all users.
 
@@ -69,9 +76,19 @@ class UserService:
 
         return user_crud.get_all_users(db)
 
+    def get_all_admin_service(self, db: Session) -> List[UserOut]:
+        all_admin = user_crud.get_all_admin(db)
+
+        if not all_admin:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="no admin found"
+            )
+
+        return all_admin
+
     def update_user_details_service(
         self, id: UUID, update_data: UpdateUser, db: Session
-    ):
+    ) -> Dict[str, str]:
         """
         Updates user details for a given user ID.
 
@@ -87,7 +104,7 @@ class UserService:
         user_crud.update_user_details(db, id, **update_data.model_dump())
         return {"message": "Service: successfully updated user details"}
 
-    def delete_user_service(self, id: UUID, db: Session):
+    def delete_user_service(self, id: UUID, db: Session) -> Dict[str, str]:
         """
         Deletes a user by their UUID.
 
@@ -99,12 +116,20 @@ class UserService:
             dict: Success message indicating the user was deleted.
         """
 
-        user_crud.delete_user(db, id)
+        try:
+            user_crud.delete_user(db, id)
+        except Exception as e:
+            logger.error(f"{LOG_MSG} error deleting user: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to delete user",
+            )
+
         return {"message": "Service: user successfully deleted"}
 
     async def change_password_service(
         self, id: UUID, payload: PasswordChangeRequest, db: Session
-    ):
+    ) -> Dict[str, str]:
         """
         Changes a user's password after verifying the old password.
 

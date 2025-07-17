@@ -18,11 +18,11 @@ def create_user(payload: CreateUser, db: Session = Depends(get_db)):
     """
     Creates a new user with the provided details.
 
-    Args:
+    <b>Args</b>:
         user (CreateUser): The user data to be created (name, email, password, etc.).
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         UserOut: The newly created user's data.
     """
 
@@ -34,49 +34,46 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
     """
     Retrieves a user by their email address.
 
-    Args:
+    <b>Args</b>:
         email (str): The email of the user to retrieve.
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         UserOut: The user's information.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If the user is not found.
     """
 
     user = user_service.get_user_by_email_service(email, db)
     if not user:
-        raise HTTPException(status_code=404, detail="user not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+        )
     return user
 
 
 @router.get("/id/{id}", response_model=UserOut)
-def get_user_by_id(
-    id: UUID,
-    db: Session = Depends(get_db),
-    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
-):
+def get_user_by_id(id: UUID, db: Session = Depends(get_db)):
     """
     Retrieves a user by their UUID.
 
-    Args:
+    <b>Args</b>:
         id (UUID): The UUID of the user to retrieve.
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         UserOut: The user's information.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If the user is not found.
     """
 
-    if current_user.id != id:
-        raise HTTPException(status_code=403, detail="Forbidden method")
-
     user = user_service.get_user_by_id_service(id, db)
     if not user:
-        raise HTTPException(status_code=404, detail="user not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+        )
     return user
 
 
@@ -85,14 +82,19 @@ def get_all_users(db: Session = Depends(get_db)):
     """
     Retrieves all users from the database.
 
-    Args:
+    <b>Args</b>:
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         List[UserOut]: A list of all users.
     """
 
     return user_service.get_all_users_service(db)
+
+
+@router.get("/admin/")
+def get_all_admin(db: Session = Depends(get_db)):
+    return user_service.get_all_admin_service(db)
 
 
 @router.patch("/id/{id}", response_model=UserOut)
@@ -105,24 +107,28 @@ def update_user_details(
     """
     Updates an existing user's information by ID.
 
-    Args:
+    <b>Args</b>:
         id (UUID): The ID of the user to update.
         update_data (UpdateUser): Fields to update in the user record.
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         UserOut: The updated user data.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If the update operation fails.
     """
 
     if current_user.id != id:
-        raise HTTPException(status_code=403, detail="Forbidden method")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden method"
+        )
 
     user_update = user_service.update_user_details_service(id, payload, db)
     if not user_update:
-        raise HTTPException(status_code=400, detail="update failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="update failed"
+        )
     return user_update
 
 
@@ -130,28 +136,30 @@ def update_user_details(
 def delete_user(
     id: UUID,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
 ):
     """
     Deletes a user by their UUID.
 
-    Args:
+    <b>Args</b>:
         id (UUID): The ID of the user to delete.
         db (Session): Database session dependency.
 
-    Returns:
+    <b>Returns</b>:
         dict: A message indicating successful deletion.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException: If the deletion fails.
     """
 
-    if current_user.id != id:
-        raise HTTPException(status_code=403, detail="Forbidden method")
-
     user_delete = user_service.delete_user_service(id, db)
     if not user_delete:
-        raise HTTPException(status_code=400, detail="delete failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="delete failed"
+        )
+
     return user_delete
 
 
@@ -169,26 +177,30 @@ async def update_password(
     It verifies that the authenticated user matches the provided user ID,
     then delegates the password change to the service layer.
 
-    Parameters:
+    <b>Parameters</b>:
         id (UUID): The ID of the user whose password is to be changed.
         payload (PasswordChangeRequest): An object containing the old and new passwords.
         db (Session): The database session dependency.
         current_user (UserOut): The currently authenticated user.
 
-    Returns:
+    <b>Returns</b>:
         UserOut: The updated user information upon successful password change.
 
-    Raises:
+    <b>Raises</b>:
         HTTPException:
             - 403 Forbidden if the authenticated user ID does not match the path ID.
             - 400 Bad Request if the password change fails in the service layer.
     """
 
     if current_user.id != id:
-        raise HTTPException(status_code=403, detail="Forbidden method")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden method"
+        )
 
     update_password = await user_service.change_password_service(id, payload, db)
     if not update_password:
-        raise HTTPException(status_code=400, detail="failed to change password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="failed to change password"
+        )
 
     return update_password
