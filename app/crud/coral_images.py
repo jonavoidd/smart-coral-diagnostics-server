@@ -1,0 +1,136 @@
+import logging
+
+from fastapi import HTTPException, status
+from sqlalchemy import select, delete, update
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+from typing import Dict, List, Optional
+from uuid import UUID
+
+from app.models.analysis_results import AnalysisResult
+from app.models.analytics_events import AnalyticsEvent
+from app.models.coral_images import CoralImages
+from app.schemas.coral_image import CoralImageCreate
+
+logger = logging.getLogger(__name__)
+LOG_MSG = "CRUD:"
+
+
+def store_coral_image(db: Session, data: CoralImageCreate) -> Optional[CoralImages]:
+    db_image = CoralImages(**data.model_dump())
+
+    try:
+        db.add(db_image)
+        db.commit()
+        db.refresh(db_image)
+
+        return db_image
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error saving image to db: {str(e)}")
+        return None
+
+
+def save_analysis_results(
+    db: Session, image_id: str, result_data: Dict
+) -> AnalysisResult:
+    image = AnalysisResult(
+        image_id=image_id,
+        confidence_score=result_data["confidence_score"],
+        classification_labels=result_data["classification_labels"],
+        bounding_boxes=result_data["bounding_boxes"],
+        model_version=result_data["model_version"],
+        analysis_duration=result_data["analysis_duration"],
+    )
+
+    try:
+        db.add(image)
+        db.commit()
+        db.refresh(image)
+
+        return image
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error saving results to db: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="failed to save analysis result to db",
+        )
+
+
+def log_analytics_event(
+    db: Session, user_id: UUID, event_type: str, details: str
+) -> AnalyticsEvent:
+    event = AnalyticsEvent(user_id=user_id, event_type=event_type, details=details)
+
+    try:
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+
+        return event
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error saving analytics event to db: {str(e)}")
+        return None
+
+
+def get_all_images(db: Session) -> List[CoralImages]:
+    try:
+        query = select(CoralImages)
+        result = db.execute(query).scalars().all()
+
+        return result
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error gettings images: {str(e)}")
+        return None
+
+
+def get_images_by_user(db: Session, id: UUID) -> Optional[List[CoralImages]]:
+    try:
+        query = select(CoralImages).where(CoralImages.user_id == id)
+        result = db.execute(query).scalars().all()
+
+        return result
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting images: {str(e)}")
+        return None
+
+
+def get_image_by_id(db: Session, id: UUID) -> CoralImages:
+    try:
+        query = select(CoralImages).where(CoralImages.id == id)
+        result = db.execute(query).scalars().first()
+
+        return result
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting images: {str(e)}")
+        return None
+
+
+def delete_image(db: Session, id: UUID):
+    query = delete(CoralImages).where(CoralImages.id == id)
+
+    try:
+        result = db.execute(query)
+        db.commit()
+
+        return result.rowcount > 0
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error deleting image")
+        raise
+
+
+def delete_selected_images(db: Session, ids: List[UUID]) -> int:
+    query = delete(CoralImages).where(CoralImages.id.in_(ids))
+
+    try:
+        result = db.execute(query)
+        db.commit()
+
+        return result.rowcount
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error deleting images")
+        return 0
