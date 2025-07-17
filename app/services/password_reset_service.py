@@ -60,8 +60,8 @@ class PasswordResetService:
             cleanup_user_token(db, user.id)
 
             token = secrets.token_urlsafe(32)
-            current_time = datetime.now(timezone.utc)
-            expires_at = current_time + timedelta(
+            # current_time = datetime.now(timezone.utc)
+            expires_at = datetime.now(timezone.utc) + timedelta(
                 minutes=settings.RESET_TOKEN_EXPIRE_MINUTES
             )
 

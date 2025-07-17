@@ -6,6 +6,8 @@ from sqlalchemy import pool
 from alembic import context
 
 from app.db.connection import Base
+
+# add models here to be added to db
 from app.models import (
     analysis_results,
     analytics_events,
@@ -14,6 +16,7 @@ from app.models import (
     terms_agreements,
     user_agreement,
     users,
+    verification_tokens,
 )
 
 # this is the Alembic Config object, which provides

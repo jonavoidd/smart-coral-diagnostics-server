@@ -1,13 +1,11 @@
 import logging
 
-from fastapi import Depends
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import insert, select, update, delete, and_
 from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
 
-from app.db.connection import get_db
 from app.models.password_reset_tokens import PasswordResetToken
 
 logger = logging.getLogger(__name__)

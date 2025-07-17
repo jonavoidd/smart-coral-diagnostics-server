@@ -6,10 +6,12 @@ from fastapi.security import (
     HTTPAuthorizationCredentials,
 )
 from jose import jwt, JWTError
+from uuid import UUID
 
 from app.db.connection import get_db
 from app.core.config import settings
 from app.crud.user import get_user_by_email
+from app.models.users import UserRole
 from app.schemas.user import UserOut
 from app.utils.token import TokenSecurity
 
@@ -56,3 +58,18 @@ async def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def require_role(allowed_roles: list[UserRole]):
+    def role_checker(id: UUID, current_user: UserOut = Depends(get_current_user)):
+        if current_user.id == id:
+            return current_user
+
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to access this resource",
+            )
+        return current_user
+
+    return role_checker
