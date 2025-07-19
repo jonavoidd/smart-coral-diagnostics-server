@@ -26,7 +26,7 @@ def create_user(payload: CreateUser, db: Session = Depends(get_db)):
         UserOut: The newly created user's data.
     """
 
-    return user_service.create_user_service(payload, db)
+    return user_service.create_user_service(db, payload)
 
 
 @router.get("/email/{email}", response_model=UserOut)
@@ -45,7 +45,7 @@ def get_user_by_email(email: str, db: Session = Depends(get_db)):
         HTTPException: If the user is not found.
     """
 
-    user = user_service.get_user_by_email_service(email, db)
+    user = user_service.get_user_by_email_service(db, email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
@@ -69,7 +69,7 @@ def get_user_by_id(id: UUID, db: Session = Depends(get_db)):
         HTTPException: If the user is not found.
     """
 
-    user = user_service.get_user_by_id_service(id, db)
+    user = user_service.get_user_by_id_service(db, id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
@@ -124,7 +124,7 @@ def update_user_details(
             status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden method"
         )
 
-    user_update = user_service.update_user_details_service(id, payload, db)
+    user_update = user_service.update_user_details_service(db, id, payload)
     if not user_update:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="update failed"
@@ -154,7 +154,7 @@ def delete_user(
         HTTPException: If the deletion fails.
     """
 
-    user_delete = user_service.delete_user_service(id, db)
+    user_delete = user_service.delete_user_service(db, id, current_user)
     if not user_delete:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="delete failed"
@@ -197,7 +197,9 @@ async def update_password(
             status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden method"
         )
 
-    update_password = await user_service.change_password_service(id, payload, db)
+    update_password = await user_service.change_password_service(
+        db, id, payload, current_user
+    )
     if not update_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="failed to change password"

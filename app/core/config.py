@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     HF_MODEL_NAME: str
     HF_USERNAME: str
 
+    OPEN_ROUTER_API_KEY: str
+
     class config:
         case_sensitive = True
 

@@ -16,11 +16,12 @@ from app.core.auth import require_role
 from app.core.supabase_client import supabase
 from app.db.connection import get_db
 from app.models.users import UserRole
-from app.schemas.coral_image import CoralImageOut
+from app.schemas.coral_image import CoralImageOut, CoralImageLocation
 from app.schemas.user import UserOut
 from app.services.coral_image_service import (
     upload_image_to_supabase_service,
     get_all_images_service,
+    get_all_coral_locations,
     get_image_for_user_service,
     get_single_image_service,
     delete_single_image_service,
@@ -40,7 +41,9 @@ async def analyze_coral_image(
     longitude: Optional[float] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
 ):
     """
     Uploads an image file to Supabase storage and returns its public URL.
@@ -62,7 +65,13 @@ async def analyze_coral_image(
 
     try:
         return upload_image_to_supabase_service(
-            db, optimized, file.filename, current_user.id, latitude, longitude
+            db,
+            optimized,
+            file.filename,
+            current_user.id,
+            latitude,
+            longitude,
+            current_user,
         )
     except Exception as e:
         raise HTTPException(
@@ -83,6 +92,11 @@ def get_all_images(db: Session = Depends(get_db)):
     """
 
     return get_all_images_service(db)
+
+
+@router.get("/coral-locations/", response_model=List[CoralImageLocation])
+def get_locations(db: Session = Depends(get_db)):
+    return get_all_coral_locations(db)
 
 
 @router.get("/u/", response_model=List[CoralImageOut])
@@ -121,8 +135,14 @@ def get_single_user_by_id(id: UUID, db: Session = Depends(get_db)):
 
 
 @router.delete("/id/{id}")
-def delete_single_image(id: UUID, db: Session = Depends(get_db)):
-    success = delete_single_image_service(db, id)
+def delete_single_image(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
+):
+    success = delete_single_image_service(db, id, current_user)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Image not found"
@@ -131,6 +151,12 @@ def delete_single_image(id: UUID, db: Session = Depends(get_db)):
 
 
 @router.delete("/images/")
-def delete_single_image(ids: List[UUID] = Body(...), db: Session = Depends(get_db)):
-    deleted_count = delete_multiple_images_service(db, ids)
+def delete_multiple_image(
+    ids: List[UUID] = Body(...),
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
+):
+    deleted_count = delete_multiple_images_service(db, ids, current_user)
     return {"deleted_count": deleted_count}

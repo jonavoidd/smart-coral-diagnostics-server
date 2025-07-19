@@ -7,7 +7,7 @@ from typing import Optional, List
 from uuid import UUID
 
 from app.models.users import User, UserRole
-from app.schemas.user import CreateUser, UpdateUser, UserOut
+from app.schemas.user import CreateUser, UpdateUser
 
 logger = logging.getLogger(__name__)
 LOG_MSG = "Crud:"
@@ -15,7 +15,7 @@ LOG_MSG = "Crud:"
 
 def create_user(
     db: Session, payload: CreateUser, hashed_password: str
-) -> Optional[UserOut]:
+) -> Optional[User]:
     user = User(
         **payload.model_dump(exclude={"password", "provider"}),
         password=hashed_password,
@@ -41,7 +41,7 @@ def create_social_user(
     email: str,
     provider: str,
     provider_id: str,
-) -> Optional[UserOut]:
+) -> Optional[User]:
     user = User(
         first_name=first_name,
         last_name=last_name,
@@ -70,7 +70,7 @@ def create_social_user(
         raise
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[UserOut]:
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
     query = select(User).where(User.email == email)
 
     try:
@@ -83,7 +83,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[UserOut]:
         return None
 
 
-def get_user_by_id(db: Session, id: UUID) -> Optional[UserOut]:
+def get_user_by_id(db: Session, id: UUID) -> Optional[User] | None:
     query = select(User).where(User.id == id)
 
     try:
@@ -96,7 +96,7 @@ def get_user_by_id(db: Session, id: UUID) -> Optional[UserOut]:
         return None
 
 
-def get_all_users(db: Session) -> Optional[List[UserOut]]:
+def get_all_users(db: Session) -> Optional[List[User]] | None:
     try:
         users = db.query(User).all()
         return users
@@ -105,7 +105,7 @@ def get_all_users(db: Session) -> Optional[List[UserOut]]:
         return None
 
 
-def get_all_admin(db: Session) -> Optional[List[UserOut]] | None:
+def get_all_admin(db: Session) -> Optional[List[User]] | None:
     query = select(User).where(
         or_(User.role == UserRole.ADMIN, User.role == UserRole.SUPER_ADMIN)
     )
@@ -120,7 +120,7 @@ def get_all_admin(db: Session) -> Optional[List[UserOut]] | None:
         return None
 
 
-def update_user_details(db: Session, payload: UpdateUser) -> Optional[UserOut] | None:
+def update_user_details(db: Session, payload: UpdateUser) -> Optional[User] | None:
     new_data = payload.model_dump(exclude_unset=True)
     query = update(User).where(User.id == id).values(**new_data).returning(User)
 
@@ -149,7 +149,7 @@ def delete_user(db: Session, id: UUID) -> bool:
         raise
 
 
-def change_password(db: Session, id: UUID, new_password: str) -> Optional[UserOut]:
+def change_password(db: Session, id: UUID, new_password: str) -> Optional[User] | None:
     query = (
         update(User).where(User.id == id).values(password=new_password).returning(User)
     )
