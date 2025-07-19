@@ -24,3 +24,11 @@ class CoralImageOut(BaseCoralImage):
 
     class Config:
         from_attributes = True
+
+
+class CoralImageLocation(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+    class Config:
+        from_attributes = True

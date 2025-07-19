@@ -1,5 +1,5 @@
 import logging
-import os
+import markdown
 
 from datetime import datetime, timezone
 from fastapi import UploadFile, HTTPException, status
@@ -12,19 +12,23 @@ from app.crud.coral_images import (
     save_analysis_results,
     store_coral_image,
     get_all_images,
+    get_coral_location,
     get_images_by_user,
     get_image_by_id,
     delete_image,
     delete_selected_images,
     log_analytics_event,
 )
-from app.schemas.coral_image import CoralImageCreate, CoralImageOut
-from app.services.ai_inference import run_inference
+from app.schemas.audit_trail import CreateAuditTrail
+from app.schemas.coral_image import CoralImageCreate
+from app.schemas.user import UserOut
+from app.services.ai_inference import run_inference, run_llm_inference
+from app.services.audit_trail_service import audit_trail_service
 
 logger = logging.getLogger(__name__)
-LOG_SMG = "Service:"
+LOG_MSG = "Service:"
 
-ALLOWED_IMAGE_TYPE = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+# ALLOWED_IMAGE_TYPE = ["image/jpg", "image/jpeg", "image/png", "image/webp", "image/gif"]
 
 
 def upload_image_to_supabase_service(
@@ -34,21 +38,18 @@ def upload_image_to_supabase_service(
     user_id: UUID,
     latitude: float,
     longitude: float,
+    user: UserOut,
 ):
-    content_type = "image/jpeg"
-
-    if content_type not in ALLOWED_IMAGE_TYPE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid image type"
-        )
-
     unique_filename = f"{uuid4()}_{original_filename}"
 
     try:
         supabase.storage.from_("coral-images").upload(unique_filename, file_bytes)
     except Exception as e:
-        logger.error(f"{LOG_SMG} supabase upload failed")
-        raise
+        logger.error(f"{LOG_MSG} supabase upload failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="image upload to supabase failed",
+        )
 
     file_url = supabase.storage.from_("coral-images").get_public_url(unique_filename)
 
@@ -64,47 +65,131 @@ def upload_image_to_supabase_service(
     )
     stored_image = store_coral_image(db, image_data)
 
-    result_data = run_inference(file_url)
-    analysis_result = save_analysis_results(db, stored_image.id, result_data)
+    try:
+        result_data = run_inference(file_url)
+        analysis_result = save_analysis_results(db, stored_image.id, result_data)
 
-    log_analytics_event(
-        db,
-        stored_image.user_id,
-        event_type="coral_inference",
-        details={
-            "image_id": str(stored_image.id),
-            "result_id": str(analysis_result.id),
-            "label": result_data["classification_labels"],
-        },
-    )
+        llm_response = run_llm_inference(
+            image_data.latitude,
+            image_data.longitude,
+            result_data["classification_labels"],
+        )
 
-    return {
-        "message": "image processed successfully",
-        "result": {
-            "label": result_data["classification_labels"],
-            "confidence": result_data["confidence_score"],
-            "model_version": result_data["model_version"],
-        },
-        "image_id": stored_image.id,
-        "result_id": analysis_result.id,
-        "stored_image": stored_image,
-        # "stored_image": CoralImageOut.model_validate(stored_image),
-    }
+        try:
+            llm_res_cleaned = llm_response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError):
+            llm_res_cleaned = "No explanation cound be generated at this time."
+
+        llm_html = markdown.markdown(llm_res_cleaned)
+
+        log_analytics_event(
+            db,
+            stored_image.user_id,
+            event_type="coral_inference",
+            details={
+                "image_id": str(stored_image.id),
+                "result_id": str(analysis_result.id),
+                "label": result_data["classification_labels"],
+            },
+        )
+
+        audit = CreateAuditTrail(
+            actor_id=user.id,
+            actor_role=user.role,
+            action="AI Analysis & Upload to Storage",
+            resource_type="coral image",
+            description=f"user with the email '{user.email}' used the service to analyze a coral image",
+        )
+        audit_trail_service.insert_audit(db, audit)
+
+        return {
+            "message": "image processed successfully",
+            "result": {
+                "label": result_data["classification_labels"],
+                "confidence": result_data["confidence_score"],
+                "model_version": result_data["model_version"],
+            },
+            "image_id": stored_image.id,
+            "result_id": analysis_result.id,
+            "stored_image": stored_image,
+            "llm_response": llm_res_cleaned,
+            "llm_response_html": llm_html,
+            # "stored_image": CoralImageOut.model_validate(stored_image),
+        }
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error running inference on image: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="running inference on image failed",
+        )
 
 
 def get_all_images_service(db: Session):
-    return get_all_images(db)
+    try:
+        all_images = get_all_images(db)
+
+        if not all_images:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="no image found"
+            )
+
+        return all_images
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error getting all images: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="getting images failed",
+        )
+
+
+def get_all_coral_locations(db: Session):
+    try:
+        return get_coral_location(db)
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error getting all coral locations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="getting coral locations failed",
+        )
 
 
 def get_image_for_user_service(db: Session, id: UUID):
-    return get_images_by_user(db, id)
+    try:
+        image_by_user = get_images_by_user(db, id)
+
+        if not image_by_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="images by user not found"
+            )
+
+        return image_by_user
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error getting image by user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="getting images failed",
+        )
 
 
 def get_single_image_service(db: Session, id: UUID):
-    return get_image_by_id(db, id)
+    try:
+        image = get_image_by_id(db, id)
+
+        if not image:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="image not found"
+            )
+
+        return image
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error getting single image by id: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="getting image failed",
+        )
 
 
-def delete_single_image_service(db: Session, id: UUID):
+def delete_single_image_service(db: Session, id: UUID, user: UserOut):
     image = get_image_by_id(db, id)
     if not image:
         raise HTTPException(
@@ -116,28 +201,61 @@ def delete_single_image_service(db: Session, id: UUID):
     try:
         supabase.storage.from_("coral-images").remove([filename])
     except Exception as e:
-        logger.error(f"{LOG_SMG} error deleting image from supabase storage: {str(e)}")
+        logger.error(f"{LOG_MSG} error deleting image from supabase storage: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Deleting image from storage failed",
         )
 
-    return delete_image(db, id)
+    audit = CreateAuditTrail(
+        actor_id=user.id,
+        actor_role=user.role,
+        action="DELETE",
+        resource_type="coral image",
+        resource_id=id,
+        description=f"user with the email '{user.email}' deleted the selected image with the id: '{id}'",
+    )
+    audit_trail_service.insert_audit(db, audit)
+
+    try:
+        return delete_image(db, id)
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error deleting image from db: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="deleting image from db failed",
+        )
 
 
-def delete_multiple_images_service(db: Session, ids: List[UUID]) -> int:
+def delete_multiple_images_service(db: Session, ids: List[UUID], user: UserOut) -> int:
     images = [get_image_by_id(db, id) for id in ids]
     filenames = [img.filename for img in images if img]
 
     try:
-        supabase.storage.from_("coral-image").remove(filenames)
+        supabase.storage.from_("coral-images").remove(filenames)
     except Exception as e:
         logger.error(
-            f"{LOG_SMG} error in deleting images from supabase storage: {str(e)}"
+            f"{LOG_MSG} error in deleting images from supabase storage: {str(e)}"
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Deleting images from storage failed",
         )
 
-    return delete_selected_images(db, ids)
+    audit = CreateAuditTrail(
+        actor_id=user.id,
+        actor_role=user.role,
+        action="DELETE",
+        resource_type="coral image",
+        description=f"user with the email '{user.email}' deleted the multiple images",
+    )
+    audit_trail_service.insert_audit(db, audit)
+
+    try:
+        return delete_selected_images(db, ids)
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error deleting images from db: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="deleting images from db failed",
+        )
