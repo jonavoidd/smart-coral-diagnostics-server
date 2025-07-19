@@ -33,7 +33,7 @@ def store(
         require_role([UserRole.SUPER_ADMIN, UserRole.ADMIN]),
     ),
 ):
-    return website_content_service.insert_content(db, payload)
+    return website_content_service.insert_content(db, payload, current_user)
 
 
 @router.patch("/id/{id}")
@@ -65,7 +65,7 @@ async def update(
                 detail="error sending email to {admin.email}",
             )
 
-    return website_content_service.update_content(db, id, payload)
+    return website_content_service.update_content(db, id, payload, current_user)
 
 
 @router.delete("/id/{id}")
@@ -76,4 +76,4 @@ def delete(
         require_role([UserRole.SUPER_ADMIN, UserRole.ADMIN])
     ),
 ):
-    return website_content_service.remove_content(db, id)
+    return website_content_service.remove_content(db, id, current_user)

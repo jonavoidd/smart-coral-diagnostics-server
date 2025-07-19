@@ -1,15 +1,19 @@
 import logging
 
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict
 from uuid import UUID
 
+from app.core.auth import require_role
 from app.core.security import Hasher
 from app.crud import user as user_crud
 from app.db.connection import get_db
+from app.models.users import UserRole
+from app.schemas.audit_trail import CreateAuditTrail
 from app.schemas.user import CreateUser, UpdateUser, UserOut
 from app.schemas.password_reset import PasswordChangeRequest
+from app.services.audit_trail_service import audit_trail_service
 from app.services.email_service import email_service
 
 
@@ -18,7 +22,7 @@ LOG_MSG = "Service:"
 
 
 class UserService:
-    def create_user_service(self, user_data: CreateUser, db: Session) -> Dict[str, str]:
+    def create_user_service(self, db: Session, user_data: CreateUser) -> Dict[str, str]:
         """
         Creates a new user in the database.
 
@@ -33,7 +37,11 @@ class UserService:
         user_crud.create_user(db, **user_data.model_dump())
         return {"message": "Service: user successfully created"}
 
-    def get_user_by_email_service(self, email: str, db: Session) -> UserOut:
+    def get_user_by_email_service(
+        self,
+        db: Session,
+        email: str,
+    ) -> UserOut:
         """
         Retrieves user details using the provided email.
 
@@ -48,7 +56,7 @@ class UserService:
         user_details = user_crud.get_user_by_email(db, email)
         return user_details
 
-    def get_user_by_id_service(self, id: UUID, db: Session) -> UserOut:
+    def get_user_by_id_service(self, db: Session, id: UUID) -> UserOut:
         """
         Retrieves user details by user ID.
 
@@ -87,7 +95,7 @@ class UserService:
         return all_admin
 
     def update_user_details_service(
-        self, id: UUID, update_data: UpdateUser, db: Session
+        self, db: Session, id: UUID, update_data: UpdateUser
     ) -> Dict[str, str]:
         """
         Updates user details for a given user ID.
@@ -104,7 +112,14 @@ class UserService:
         user_crud.update_user_details(db, id, **update_data.model_dump())
         return {"message": "Service: successfully updated user details"}
 
-    def delete_user_service(self, id: UUID, db: Session) -> Dict[str, str]:
+    def delete_user_service(
+        self,
+        db: Session,
+        id: UUID,
+        user: UserOut = Depends(
+            require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+        ),
+    ) -> Dict[str, str]:
         """
         Deletes a user by their UUID.
 
@@ -118,6 +133,17 @@ class UserService:
 
         try:
             user_crud.delete_user(db, id)
+
+            audit = CreateAuditTrail(
+                actor_id=user.id,
+                actor_role=user.role,
+                action="DELETE",
+                resource_type="user",
+                resource_id=id,
+                description=f"user with the email '{user.email}' performed an action to delete user with id '{id}'",
+            )
+            audit_trail_service.insert_audit(db, audit)
+
         except Exception as e:
             logger.error(f"{LOG_MSG} error deleting user: {str(e)}")
             raise HTTPException(
@@ -128,7 +154,13 @@ class UserService:
         return {"message": "Service: user successfully deleted"}
 
     async def change_password_service(
-        self, id: UUID, payload: PasswordChangeRequest, db: Session
+        self,
+        db: Session,
+        id: UUID,
+        payload: PasswordChangeRequest,
+        user: UserOut = Depends(
+            require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+        ),
     ) -> Dict[str, str]:
         """
         Changes a user's password after verifying the old password.
@@ -165,6 +197,16 @@ class UserService:
         user_crud.change_password(db, id, hashed_pwd)
 
         await email_service.send_password_changed_confirmation(user.email, user.name)
+
+        audit = CreateAuditTrail(
+            actor_id=user.id,
+            actor_role=user.role,
+            action="UPDATE",
+            resource_type="user",
+            resource_id=id,
+            description=f"user with the email {user.email} changed their password",
+        )
+        audit_trail_service.insert_audit(db, audit)
 
         return {"message": "Service: successfully changed password"}
 

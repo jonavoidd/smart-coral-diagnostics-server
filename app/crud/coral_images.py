@@ -10,7 +10,7 @@ from uuid import UUID
 from app.models.analysis_results import AnalysisResult
 from app.models.analytics_events import AnalyticsEvent
 from app.models.coral_images import CoralImages
-from app.schemas.coral_image import CoralImageCreate
+from app.schemas.coral_image import CoralImageCreate, CoralImageLocation
 
 logger = logging.getLogger(__name__)
 LOG_MSG = "CRUD:"
@@ -83,6 +83,21 @@ def get_all_images(db: Session) -> List[CoralImages]:
         return result
     except SQLAlchemyError as e:
         logger.error(f"{LOG_MSG} error gettings images: {str(e)}")
+        return None
+
+
+def get_coral_location(db: Session) -> List[CoralImageLocation] | None:
+    try:
+        query = select(CoralImages.latitude, CoralImages.longitude)
+        result = db.execute(query).all()
+
+        locations = [
+            CoralImageLocation(latitude=lat, longitude=lon) for lat, lon in result
+        ]
+
+        return locations
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting locations: {str(e)}")
         return None
 
 

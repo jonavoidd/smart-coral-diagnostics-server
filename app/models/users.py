@@ -96,6 +96,10 @@ class User(Base):
         "CoralImages", back_populates="user", cascade="all, delete-orphan"
     )
 
+    audit_trail = relationship(
+        "AuditTrail", back_populates="user", cascade="all, delete-orphan"
+    )
+
     __table_args__ = (
         Index("idx_users_on_id", "id"),
         Index("idx_users_on_email", "email"),

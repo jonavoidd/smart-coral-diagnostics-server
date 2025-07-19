@@ -20,7 +20,7 @@ def add_admin(
 ):
     payload.role = UserRole.ADMIN
 
-    return super_admin.create_admin(db, payload)
+    return super_admin.create_admin(db, payload, current_user)
 
 
 @router.delete("/{id}")
@@ -29,4 +29,4 @@ def delete_admin(
     db: Session = Depends(get_db),
     current_user: UserOut = Depends(require_role([UserRole.SUPER_ADMIN])),
 ):
-    return super_admin.remove_admin(db, id)
+    return super_admin.remove_admin(db, id, current_user)
