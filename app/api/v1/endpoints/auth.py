@@ -1,3 +1,4 @@
+import logging
 import secrets
 
 from datetime import datetime, timedelta, timezone
@@ -18,14 +19,16 @@ from app.crud.user import (
 from app.crud.verify_token import get_verification_token, store_verification_token
 from app.db.connection import get_db
 from app.schemas.token import Token
-from app.schemas import user
+from app.schemas.user import CreateUser, UpdateUser
 from app.services.email_service import send_verification_email
 from app.utils.token import TokenSecurity
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+LOG_MSG = "Endpoint:"
 
 
-@router.post("/token", response_model=Token)
+@router.post("/token")
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
@@ -42,54 +45,113 @@ def login(
     <b>Raises</b>:
         HTTPException: If the user is not found, uses a non-local provider, or the password is incorrect.
     """
+    try:
+        user = get_user_by_email(db, form_data.username)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="incorrect email or password",
+            )
 
-    user = get_user_by_email(db, form_data.username)
+        if user.provider != "local":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="please use social login for this acccount",
+            )
+
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="please verify your email first",
+            )
+
+        if not Hasher.verify_password(form_data.password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="incorrect email or password",
+            )
+
+        name = f"{user.first_name} {user.last_name}"
+
+        user_data = {
+            "id": str(user.id),
+            "is_verified": user.is_verified,
+            "role": user.role,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }
+
+        access_token = TokenSecurity.create_access_token(
+            user.email, user_data=user_data
+        )
+        response = JSONResponse(
+            content={
+                "message": "login successful",
+                "access_token": access_token,
+                "token_type": "bearer",
+                "name": name,
+                "email": user.email,
+                "user_id": str(user.id),
+                "role": user.role,
+            }
+        )
+
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            path="/",
+            max_age=3600,
+        )
+        return response
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error upon signin: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="signin failed"
+        )
+
+
+@router.post("/refresh")
+async def refresh_token(request: Request, db: Session = Depends(get_db)):
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh token missing"
+        )
+
+    payload = TokenSecurity.create_refresh_token(refresh_token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid refresh token"
+        )
+
+    user = get_user_by_email(db, payload.get("sub"))
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="incorrect email or password",
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
         )
 
-    if user.provider != "local":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="please use social login for this acccount",
-        )
+    user_data = {
+        "id": user.id,
+        "is_verified": user.is_verified,
+        "role": user.role,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+    }
 
-    if not user.is_verified:
-        return HTTPException(
-            status=status.HTTP_403_FORBIDDEN, detail="please verify your email first"
-        )
-
-    if not Hasher.verify_password(form_data.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="incorrect email or password",
-        )
-
-    name = f"{user.first_name} {user.last_name}"
-
-    access_token = TokenSecurity.create_access_token(user.email)
-    response = JSONResponse(
-        content={
-            "message": "login successful",
-            "access_token": access_token,
-            "name": name,
-            "email": user.email,
-        }
+    new_access_token = TokenSecurity.create_access_token(
+        subject=user.email, user_data=user_data
     )
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-    )
-    return response
+
+    return {"access_token": new_access_token, "token_type": "bearer"}
 
 
 @router.post("/signup", response_model=Token)
-async def signup(user_data: user.CreateUser, db: Session = Depends(get_db)):
+async def signup(user_data: CreateUser, db: Session = Depends(get_db)):
     """
     Register a new user with the provided details, then return an access token for immediate login.
 
@@ -104,59 +166,65 @@ async def signup(user_data: user.CreateUser, db: Session = Depends(get_db)):
         HTTPException: If an account with the given email already exists.
     """
 
-    existing_user = get_user_by_email(db, user_data.email)
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="account already exists"
+    try:
+        existing_user = get_user_by_email(db, user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="account already exists"
+            )
+
+        hashed_pwd = Hasher.hash_password(user_data.password)
+        user = create_user(
+            db,
+            payload=user_data,
+            hashed_password=hashed_pwd,
         )
 
-    hashed_pwd = Hasher.hash_password(user_data.password)
-    user = create_user(
-        db,
-        payload=user_data,
-        hashed_password=hashed_pwd,
-    )
-
-    verification_token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        hours=settings.VERIFICATION_TOKEN_EXPIRE_HOURS
-    )
-
-    stored = store_verification_token(db, user.id, verification_token, expires_at)
-    if not stored:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to store verification token",
+        verification_token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            hours=settings.VERIFICATION_TOKEN_EXPIRE_HOURS
         )
 
-    verification_url = (
-        f"{settings.BACKEND_URL}/api/v1/auth/verify-email?token={verification_token}"
-    )
+        stored = store_verification_token(db, user.id, verification_token, expires_at)
+        if not stored:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to store verification token",
+            )
 
-    name = f"{user_data.first_name} {user_data.last_name or ''}".strip()
-    await send_verification_email(user_data.email, name, verification_url, expires_at)
+        verification_url = f"{settings.BACKEND_URL}/api/v1/auth/verify-email?token={verification_token}"
 
-    # auto login after signup
-    access_token = TokenSecurity.create_access_token(user.email)
-    response = JSONResponse(
-        content={
-            "message": "login successful",
-            "access_token": access_token,
-            "name": name,
-            "email": user.email,
-        }
-    )
-    response.set_cookie(
-        key="access_token",
-        value=access_token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-    )
-    return response
+        name = f"{user_data.first_name} {user_data.last_name or ''}".strip()
+        await send_verification_email(
+            user_data.email, name, verification_url, expires_at
+        )
+
+        # auto login after signup
+        access_token = TokenSecurity.create_access_token(user.email)
+        response = JSONResponse(
+            content={
+                "message": "login successful",
+                "access_token": access_token,
+                "name": name,
+                "email": user.email,
+            }
+        )
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+        )
+        return response
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error upon signin: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="signup failed"
+        )
 
 
-@router.get("/auth/{provider}")
+@router.get("/provider/{provider}")
 async def social_auth(provider: str, request: Request):
     """
     Initiates OAuth2 authorization flow with the specified social provider.
@@ -182,7 +250,7 @@ async def social_auth(provider: str, request: Request):
     return await client.authorize_redirect(request, redirect_uri)
 
 
-@router.get("/auth/{provider}/callback")
+@router.get("/{provider}/callback")
 async def social_callback(
     provider: str, request: Request, db: Session = Depends(get_db)
 ):
@@ -217,6 +285,7 @@ async def social_callback(
 
         email = user_info.get("email")
         name = user_info.get("name")
+        profile = user_info.get("picture")
         provider_id = user_info.get("sub") or user_info.get("id")
 
         if not email:
@@ -229,13 +298,16 @@ async def social_callback(
 
         if existing_user:
             if existing_user.provider == "local":
-                user = update_user_details(
-                    db=db,
-                    name=name,
+                user = UpdateUser(
+                    first_name=name,
                     email=email,
                     provider=provider,
                     provider_id=provider_id,
+                    profile=profile,
+                    is_verified=True,
                 )
+
+                update_user_details(db=db, id=existing_user.id, payload=user)
             else:
                 user = existing_user
 
@@ -246,13 +318,37 @@ async def social_callback(
                 email=email,
                 provider=provider,
                 provider_id=-provider_id,
+                profile=profile,
+                is_verified=True,
             )
 
-            access_token = TokenSecurity.create_access_token({"sub": user.email})
+        user_data = {
+            "id": str(user.id),
+            "is_verified": user.is_verified,
+            "role": user.role,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        }
 
-            frontend_url = f"http://localhost:8000/api/v1/auth/callback?token={access_token}&name={user.name}&email={user.email}"
-            return RedirectResponse(frontend_url)
+        access_token = TokenSecurity.create_access_token(
+            user.email, user_data=user_data
+        )
 
+        # frontend_url = f"http://localhost:8000/api/v1/auth/callback?token={access_token}&name={user.name}&email={user.email}"
+        frontend_url = f"http://localhost:3000"
+        response = RedirectResponse(frontend_url)
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            path="/",
+            max_age=3600,
+        )
+
+        return response
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -263,9 +359,20 @@ async def social_callback(
 # Verify Email
 @router.get("/verify-email")
 def verify_email(token: str, db: Session = Depends(get_db)):
-    verification_token = get_verification_token(db, token)
+    try:
+        verification_token = get_verification_token(db, token)
 
-    if not verification_token:
-        return RedirectResponse(f"{settings.FRONTEND_URL}/verify-email?status=failed")
+        if not verification_token:
+            return RedirectResponse(
+                f"{settings.FRONTEND_URL}/verify-email?status=failed"
+            )
 
-    return RedirectResponse(f"{settings.FRONTEND_URL}/verify-email?status=succeeded")
+        return RedirectResponse(
+            f"{settings.FRONTEND_URL}/verify-email?status=succeeded"
+        )
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error verifying email: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="email verification failed",
+        )

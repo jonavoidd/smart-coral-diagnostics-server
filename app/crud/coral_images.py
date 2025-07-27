@@ -3,7 +3,7 @@ import logging
 from fastapi import HTTPException, status
 from sqlalchemy import select, delete, update
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import Dict, List, Optional
 from uuid import UUID
 
@@ -83,6 +83,20 @@ def get_all_images(db: Session) -> List[CoralImages]:
         return result
     except SQLAlchemyError as e:
         logger.error(f"{LOG_MSG} error gettings images: {str(e)}")
+        return None
+
+
+def get_all_images_with_results(db: Session):
+    try:
+        return (
+            db.query(CoralImages)
+            .options(
+                joinedload(CoralImages.user), joinedload(CoralImages.analysis_results)
+            )
+            .all()
+        )
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting coral data: {str(e)}")
         return None
 
 

@@ -17,11 +17,15 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str
     SUPABASE_JWT_KEY: str
 
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+
     SECRET_KEY: str
     REFRESH_SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
+    SESSION_SECRET: str
 
     RESET_TOKEN_EXPIRE_MINUTES: int = 30
     VERIFICATION_TOKEN_EXPIRE_HOURS: int = 60
@@ -44,8 +48,11 @@ class Settings(BaseSettings):
 
     HF_MODEL_NAME: str
     HF_USERNAME: str
+    HF_MODEL_FILENAME: str
+    HF_ACCESS_TOKEN: str
 
     OPEN_ROUTER_API_KEY: str
+    TOGETHER_AI_API_KEY: str
 
     class config:
         case_sensitive = True

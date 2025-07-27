@@ -3,10 +3,11 @@ import logging
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Dict
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.core.auth import require_role
 from app.core.security import Hasher
+from app.core.supabase_client import supabase
 from app.crud import user as user_crud
 from app.db.connection import get_db
 from app.models.users import UserRole
@@ -95,8 +96,8 @@ class UserService:
         return all_admin
 
     def update_user_details_service(
-        self, db: Session, id: UUID, update_data: UpdateUser
-    ) -> Dict[str, str]:
+        self, db: Session, id: UUID, update_data: UpdateUser, user: UserOut
+    ) -> UserOut:
         """
         Updates user details for a given user ID.
 
@@ -109,8 +110,62 @@ class UserService:
             dict: Success message indicating the user details were updated.
         """
 
-        user_crud.update_user_details(db, id, **update_data.model_dump())
-        return {"message": "Service: successfully updated user details"}
+        updated_user = user_crud.update_user_details(db, id, update_data)
+
+        audit = CreateAuditTrail(
+            actor_id=user.id,
+            actor_role=user.role,
+            action="UPDATE",
+            resource_type="user",
+            resource_id=user.id,
+            description=f"user with the email '{user.email}' performed an action to update their details",
+        )
+
+        audit_trail_service.insert_audit(db, audit)
+
+        return updated_user
+
+    def update_user_profile(
+        self,
+        db: Session,
+        id: UUID,
+        file_bytes: bytes,
+        original_filename: str,
+        user: UserOut,
+    ) -> Dict[str, str]:
+        unique_filename = f"{uuid4()}_{original_filename}"
+
+        try:
+            supabase.storage.from_("profile-pictures").upload(
+                unique_filename, file_bytes
+            )
+        except Exception as e:
+            logger.error(f"{LOG_MSG} error uploading image to supabase: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to upload image to supabase",
+            )
+
+        file_url = supabase.storage.from_("profile-pictures").get_public_url(
+            unique_filename
+        )
+
+        data = UpdateUser(profile=file_url)
+
+        user_crud.update_user_details(db, id, data)
+
+        audit = CreateAuditTrail(
+            actor_id=user.id,
+            actor_role=user.role,
+            action="UPDATE",
+            resource_type="user",
+            resource_id=user.id,
+            description=f"user with the email '{user.email}' performed an action to update their profile picture",
+        )
+
+        audit_trail_service.insert_audit(db, audit)
+
+        return {"message": "Service: successfully updated user profile"}
 
     def delete_user_service(
         self,

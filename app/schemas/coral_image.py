@@ -1,7 +1,23 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
+
+
+class PartialUserData(BaseModel):
+    id: UUID
+    first_name: str
+    last_name: str
+    email: str
+
+
+class PartialAnalysisResult(BaseModel):
+    id: UUID
+    image_id: UUID
+    confidence_score: float
+    classification_labels: str
+    analysis_duration: float
+    analyzed_at: datetime
 
 
 class BaseCoralImage(BaseModel):
@@ -21,6 +37,8 @@ class CoralImageCreate(BaseCoralImage):
 
 class CoralImageOut(BaseCoralImage):
     id: UUID
+    user: Optional[PartialUserData] = None
+    analysis_results: Optional[List[PartialAnalysisResult]] = []
 
     class Config:
         from_attributes = True

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
@@ -8,9 +10,11 @@ from app.db.connection import get_db
 from app.models.users import UserRole
 from app.schemas.password_reset import PasswordChangeRequest
 from app.schemas.user import CreateUser, UpdateUser, UserOut
+from app.services.image_processing import validate_image, optimize_for_storage
 from app.services.user_service import user_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -97,12 +101,13 @@ def get_all_admin(db: Session = Depends(get_db)):
     return user_service.get_all_admin_service(db)
 
 
-@router.patch("/id/{id}", response_model=UserOut)
+@router.patch("/me/profile-details", response_model=UserOut)
 def update_user_details(
-    id: UUID,
     payload: UpdateUser,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(require_role([UserRole.USER])),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
 ):
     """
     Updates an existing user's information by ID.
@@ -119,17 +124,38 @@ def update_user_details(
         HTTPException: If the update operation fails.
     """
 
-    if current_user.id != id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden method"
-        )
+    updated_user = user_service.update_user_details_service(
+        db, current_user.id, payload, current_user
+    )
 
-    user_update = user_service.update_user_details_service(db, id, payload)
-    if not user_update:
+    if not updated_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="update failed"
         )
-    return user_update
+    return updated_user
+
+
+@router.patch("/me/profile-picture")
+def update_user_profile(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
+):
+    validate_image(file)
+    optimized = optimize_for_storage(file)
+
+    try:
+        return user_service.update_user_profile(
+            db, current_user.id, optimized, file.filename, current_user
+        )
+    except Exception as e:
+        logger.error(f"API: error uploading image to supabase: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"file upload failed",
+        )
 
 
 @router.delete("/id/{id}")
@@ -163,12 +189,11 @@ def delete_user(
     return user_delete
 
 
-@router.patch("/id/{id}/password")
+@router.patch("/me/password")
 async def update_password(
-    id: UUID,
     payload: PasswordChangeRequest,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
+    current_user: UserOut = Depends(require_role([UserRole.USER])),
 ):
     """
     Updates the password of the user with the given ID.
@@ -198,7 +223,7 @@ async def update_password(
         )
 
     update_password = await user_service.change_password_service(
-        db, id, payload, current_user
+        db, current_user.id, payload, current_user
     )
     if not update_password:
         raise HTTPException(

@@ -85,7 +85,7 @@ class WebsiteContentService:
             update(db, id, payload)
 
             audit = CreateAuditTrail(
-                action=user.id,
+                actor_id=user.id,
                 actor_role=user.role,
                 action="UPDATE",
                 resource_type=RSC_TYPE,
