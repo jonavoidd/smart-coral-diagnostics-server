@@ -21,6 +21,7 @@ from app.schemas.user import UserOut
 from app.services.coral_image_service import (
     upload_image_to_supabase_service,
     get_all_images_service,
+    get_all_coral_data,
     get_all_coral_locations,
     get_image_for_user_service,
     get_single_image_service,
@@ -40,10 +41,10 @@ async def analyze_coral_image(
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
     current_user: UserOut = Depends(
         require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
     ),
+    db: Session = Depends(get_db),
 ):
     """
     Uploads an image file to Supabase storage and returns its public URL.
@@ -68,7 +69,6 @@ async def analyze_coral_image(
             db,
             optimized,
             file.filename,
-            current_user.id,
             latitude,
             longitude,
             current_user,
@@ -92,6 +92,11 @@ def get_all_images(db: Session = Depends(get_db)):
     """
 
     return get_all_images_service(db)
+
+
+@router.get("/coral-data/", response_model=List[CoralImageOut])
+def get_coral_data(db: Session = Depends(get_db)):
+    return get_all_coral_data(db)
 
 
 @router.get("/coral-locations/", response_model=List[CoralImageLocation])

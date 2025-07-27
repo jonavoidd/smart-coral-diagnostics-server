@@ -9,9 +9,9 @@ class AuditTrailBase(BaseModel):
     actor_role: int
     action: str
     resource_type: str
-    resource_id: Optional[UUID]
+    resource_id: Optional[UUID] = None
     description: str
-    timestamp: datetime
+    timestamp: Optional[datetime] = None
 
 
 class CreateAuditTrail(AuditTrailBase):

@@ -83,7 +83,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
         return None
 
 
-def get_user_by_id(db: Session, id: UUID) -> Optional[User] | None:
+def get_user_by_id(db: Session, id: UUID) -> Optional[User]:
     query = select(User).where(User.id == id)
 
     try:
@@ -96,7 +96,7 @@ def get_user_by_id(db: Session, id: UUID) -> Optional[User] | None:
         return None
 
 
-def get_all_users(db: Session) -> Optional[List[User]] | None:
+def get_all_users(db: Session) -> Optional[List[User]]:
     try:
         users = db.query(User).all()
         return users
@@ -105,7 +105,7 @@ def get_all_users(db: Session) -> Optional[List[User]] | None:
         return None
 
 
-def get_all_admin(db: Session) -> Optional[List[User]] | None:
+def get_all_admin(db: Session) -> Optional[List[User]]:
     query = select(User).where(
         or_(User.role == UserRole.ADMIN, User.role == UserRole.SUPER_ADMIN)
     )
@@ -120,7 +120,7 @@ def get_all_admin(db: Session) -> Optional[List[User]] | None:
         return None
 
 
-def update_user_details(db: Session, payload: UpdateUser) -> Optional[User] | None:
+def update_user_details(db: Session, id: UUID, payload: UpdateUser) -> Optional[User]:
     new_data = payload.model_dump(exclude_unset=True)
     query = update(User).where(User.id == id).values(**new_data).returning(User)
 
@@ -149,7 +149,7 @@ def delete_user(db: Session, id: UUID) -> bool:
         raise
 
 
-def change_password(db: Session, id: UUID, new_password: str) -> Optional[User] | None:
+def change_password(db: Session, id: UUID, new_password: str) -> Optional[User]:
     query = (
         update(User).where(User.id == id).values(password=new_password).returning(User)
     )

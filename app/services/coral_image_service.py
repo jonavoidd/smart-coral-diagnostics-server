@@ -12,6 +12,7 @@ from app.crud.coral_images import (
     save_analysis_results,
     store_coral_image,
     get_all_images,
+    get_all_images_with_results,
     get_coral_location,
     get_images_by_user,
     get_image_by_id,
@@ -20,7 +21,7 @@ from app.crud.coral_images import (
     log_analytics_event,
 )
 from app.schemas.audit_trail import CreateAuditTrail
-from app.schemas.coral_image import CoralImageCreate
+from app.schemas.coral_image import CoralImageCreate, CoralImageOut
 from app.schemas.user import UserOut
 from app.services.ai_inference import run_inference, run_llm_inference
 from app.services.audit_trail_service import audit_trail_service
@@ -35,7 +36,6 @@ def upload_image_to_supabase_service(
     db: Session,
     file_bytes: bytes,
     original_filename: str,
-    user_id: UUID,
     latitude: float,
     longitude: float,
     user: UserOut,
@@ -54,7 +54,7 @@ def upload_image_to_supabase_service(
     file_url = supabase.storage.from_("coral-images").get_public_url(unique_filename)
 
     image_data = CoralImageCreate(
-        user_id=user_id,
+        user_id=user.id,
         file_url=file_url,
         filename=unique_filename,
         original_upload_name=original_filename,
@@ -80,7 +80,25 @@ def upload_image_to_supabase_service(
         except (KeyError, IndexError):
             llm_res_cleaned = "No explanation cound be generated at this time."
 
-        llm_html = markdown.markdown(llm_res_cleaned)
+        split_marker = "Recommended Actions:"
+        if split_marker in llm_res_cleaned:
+            description_text, recommended_text = llm_res_cleaned.split(split_marker, 1)
+        else:
+            description_text = llm_res_cleaned
+            recommended_text = ""
+
+        description_html = markdown.markdown(description_text.strip())
+
+        bullet_lines = [
+            line.strip()[2:].strip()
+            for line in recommended_text.splitlines()
+            if line.strip().startswith("- ")
+        ]
+        recommended_html = (
+            "<ul>" + "".join(f"<li>{line}" for line in bullet_lines) + "</ul>"
+            if bullet_lines
+            else ""
+        )
 
         log_analytics_event(
             db,
@@ -112,8 +130,10 @@ def upload_image_to_supabase_service(
             "image_id": stored_image.id,
             "result_id": analysis_result.id,
             "stored_image": stored_image,
-            "llm_response": llm_res_cleaned,
-            "llm_response_html": llm_html,
+            "llm_response_description": description_text.strip(),
+            "llm_response_recommended": recommended_text.strip(),
+            "llm_response_description_html": description_html,
+            "llm_response_recommended_html": recommended_html,
             # "stored_image": CoralImageOut.model_validate(stored_image),
         }
     except Exception as e:
@@ -139,6 +159,24 @@ def get_all_images_service(db: Session):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="getting images failed",
+        )
+
+
+def get_all_coral_data(db: Session) -> List[CoralImageOut]:
+    try:
+        all_data = get_all_images_with_results(db)
+
+        if not all_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="no data found"
+            )
+
+        return all_data
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error getting all coral data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="gettin coral data failed",
         )
 
 

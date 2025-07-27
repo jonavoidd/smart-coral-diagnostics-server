@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from pydantic import BaseModel, EmailStr, StringConstraints, constr
+from pydantic import BaseModel, EmailStr, StringConstraints
 from typing import Annotated, List, Optional
 from uuid import UUID
 
@@ -48,11 +48,10 @@ class CreateUser(UserBase):
     password: PasswordStr
 
 
-class UpdateUser(UserBase):
+class UpdateUser(BaseModel):
+    email: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    password: PasswordStr
     provider: Optional[str] = None
     provider_id: Optional[str] = None
     contact_number: Optional[str] = None
@@ -74,11 +73,8 @@ class UpdateUser(UserBase):
 
     primary_interests: Optional[List[str]] = None
     contribution_types: Optional[List[str]] = None
-
-    role: Optional[int] = None
-    profile: Optional[str] = None
-    is_verified: Optional[bool] = None
     is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
 
     updated_at: Optional[datetime] = None
 
@@ -91,7 +87,3 @@ class UserOut(UserBase):
 
     class Config:
         from_attributes = True
-
-
-class UserInDB(UserOut):
-    password: PasswordStr
