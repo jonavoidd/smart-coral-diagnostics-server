@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     OPEN_ROUTER_API_KEY: str
     TOGETHER_AI_API_KEY: str
 
+    REDIS_URL: str
+
     class config:
         case_sensitive = True
 

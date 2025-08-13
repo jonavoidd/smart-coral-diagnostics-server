@@ -35,7 +35,7 @@ class UserService:
             dict: Success message indicating the user was created.
         """
 
-        user_crud.create_user(db, **user_data.model_dump())
+        user_crud.create_user(db, user_data, hashed_password=user_data.password)
         return {"message": "Service: user successfully created"}
 
     def get_user_by_email_service(

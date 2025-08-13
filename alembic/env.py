@@ -9,9 +9,10 @@ from app.db.connection import Base
 
 # add models here to be added to db
 from app.models import (
-    audit_trail,
     analysis_results,
     analytics_events,
+    archived_images,
+    audit_trail,
     coral_images,
     password_reset_tokens,
     terms_agreements,

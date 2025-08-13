@@ -71,7 +71,7 @@ def get_verification_token(db: Session, token: str) -> Optional[VerificationToke
 
 
 def verify_user(db: Session, id: UUID) -> bool:
-    query = update(User).where(User.id == id).values(is_verified=True)
+    query = update(User).where(User.id == id).values(is_verified=True, is_active=True)
 
     try:
         result = db.execute(query)
