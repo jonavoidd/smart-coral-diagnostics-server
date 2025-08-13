@@ -7,7 +7,11 @@ from app.core.auth import require_role
 from app.crud.user import get_all_admin
 from app.db.connection import get_db
 from app.models.users import UserRole
-from app.schemas.website_content import WebsiteContentCreate, WebsiteContentOut
+from app.schemas.website_content import (
+    WebsiteContentCreate,
+    WebsiteContentUpdate,
+    WebsiteContentOut,
+)
 from app.schemas.user import UserOut
 from app.services.email_service import send_web_update_email_to_admins
 from app.services.website_content import website_content_service
@@ -39,7 +43,7 @@ def store(
 @router.patch("/id/{id}")
 async def update(
     id: UUID,
-    payload: WebsiteContentCreate,
+    payload: WebsiteContentUpdate,
     db: Session = Depends(get_db),
     current_user: UserOut = Depends(
         require_role([UserRole.SUPER_ADMIN, UserRole.ADMIN])

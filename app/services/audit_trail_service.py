@@ -3,6 +3,7 @@ import logging
 from datetime import date
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List
 from uuid import UUID
 
 from app.crud.audit_trail import audit_trail_crud
@@ -20,7 +21,7 @@ class AuditTrailService:
 
         return res
 
-    def select_all_audit(self, db: Session):
+    def select_all_audit(self, db: Session) -> List[AuditTrailOut]:
         return audit_trail_crud.get_all_audit(db)
 
     def select_audit_by_id(self, db: Session, id: UUID):
@@ -33,7 +34,9 @@ class AuditTrailService:
 
         return res
 
-    def select_audit_by_date(self, db: Session, start_date: date, end_date: date):
+    def select_audit_by_date(
+        self, db: Session, start_date: date, end_date: date
+    ) -> List[AuditTrailOut]:
         return audit_trail_crud.get_audit_by_date(db, start_date, end_date)
 
 

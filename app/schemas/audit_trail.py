@@ -18,7 +18,7 @@ class CreateAuditTrail(AuditTrailBase):
     pass
 
 
-class AuditTrailOut(BaseModel):
+class AuditTrailOut(AuditTrailBase):
     id: UUID
 
     class Config:

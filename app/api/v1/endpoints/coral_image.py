@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import (
     APIRouter,
     Body,
@@ -16,7 +17,7 @@ from app.core.auth import require_role
 from app.core.supabase_client import supabase
 from app.db.connection import get_db
 from app.models.users import UserRole
-from app.schemas.coral_image import CoralImageOut, CoralImageLocation
+from app.schemas.coral_image import CoralImageOut, CoralImageLocation, UpdateCoralImage
 from app.schemas.user import UserOut
 from app.services.coral_image_service import (
     upload_image_to_supabase_service,
@@ -25,6 +26,7 @@ from app.services.coral_image_service import (
     get_all_coral_locations,
     get_image_for_user_service,
     get_single_image_service,
+    edit_image_details,
     delete_single_image_service,
     delete_multiple_images_service,
 )
@@ -40,6 +42,9 @@ router = APIRouter()
 async def analyze_coral_image(
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
+    water_temperature: Optional[str] = Form(None),
+    water_depth: Optional[float] = Form(None),
+    observation_date: Optional[datetime] = Form(None),
     file: UploadFile = File(...),
     current_user: UserOut = Depends(
         require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
@@ -71,6 +76,9 @@ async def analyze_coral_image(
             file.filename,
             latitude,
             longitude,
+            water_temperature,
+            water_depth,
+            observation_date,
             current_user,
         )
     except Exception as e:
@@ -104,10 +112,13 @@ def get_locations(db: Session = Depends(get_db)):
     return get_all_coral_locations(db)
 
 
-@router.get("/u/", response_model=List[CoralImageOut])
+@router.get("/u", response_model=List[CoralImageOut])
 def get_user_images(
+    # id: UUID,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(require_role([UserRole.USER, UserRole.ADMIN])),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
 ):
     """
     Retrieve a list of coral images belonging to the currently authenticated user.
@@ -124,7 +135,7 @@ def get_user_images(
 
 
 @router.get("/id/{id}", response_model=CoralImageOut)
-def get_single_user_by_id(id: UUID, db: Session = Depends(get_db)):
+def get_single_image_by_id(id: UUID, db: Session = Depends(get_db)):
     """
     Retrieve a single coral image by its unique ID.
 
@@ -137,6 +148,13 @@ def get_single_user_by_id(id: UUID, db: Session = Depends(get_db)):
     """
 
     return get_single_image_service(db, id)
+
+
+@router.patch("/id/{id}")
+def update_image_details(
+    id: UUID, payload: UpdateCoralImage, db: Session = Depends(get_db)
+):
+    return edit_image_details(db, id, payload)
 
 
 @router.delete("/id/{id}")
