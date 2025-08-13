@@ -6,6 +6,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from jinja2 import Template
 from typing import Optional, List
+from urllib.parse import quote
+from premailer import transform
 
 from app.core.config import settings
 
@@ -316,163 +318,265 @@ class EmailService:
     async def send_verification_email(
         self, email: str, name: str, verification_url: str, expires_mins: int
     ) -> bool:
+        """
+        Sends a verification email with proper HTML email compatibility.
+
+        Args:
+            email: Recipient email address
+            name: Recipient name
+            verification_url: The verification URL
+            expires_mins: Minutes until the link expires
+
+        Returns:
+            bool: True if sent successfully, False otherwise
+        """
         subject = "Email Confirmation"
 
+        # URL encode the verification link to handle special characters
+        safe_verification_url = quote(verification_url, safe=":/")
+
+        # HTML template with table-based layout and inline CSS
         html_template = """
         <!DOCTYPE html>
         <html>
         <head>
-            <meta charset="utf-8">
+            <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Verify Your Email</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    line-height: 1.6;
-                    color: #2c3e50;
-                    background-color: #eaf6fb;
-                    max-width: 600px;
-                    margin: 0 auto;
-                    padding: 20px;
-                }
-                .container {
-                    background-color: #ffffff;
-                    padding: 30px;
-                    border-radius: 10px;
-                    border: 1px solid #cce7f0;
-                    box-shadow: 0 4px 10px rgba(0, 123, 255, 0.1);
-                }
-                .header {
-                    text-align: center;
-                    margin-bottom: 30px;
-                }
-                .logo {
-                    font-size: 26px;
-                    font-weight: bold;
-                    color: #0077b6;
-                }
-                .content {
-                    background-color: #f0faff;
-                    padding: 25px;
-                    border-radius: 8px;
-                    margin: 20px 0;
-                }
-                h2 {
-                    color: #0077b6;
-                }
-                .button {
-                    display: inline-block;
-                    background-color: #00b4d8;
-                    color: white;
-                    padding: 12px 30px;
-                    text-decoration: none;
-                    border-radius: 5px;
-                    font-weight: bold;
-                    margin: 20px 0;
-                    transition: background-color 0.3s ease;
-                }
-                .button:hover {
-                    background-color: #0096c7;
-                }
-                .footer {
-                    text-align: center;
-                    margin-top: 30px;
-                    font-size: 12px;
-                    color: #666;
-                }
-                .warning {
-                    background-color: #fff3cd;
-                    border: 1px solid #ffeaa7;
-                    padding: 15px;
-                    border-radius: 5px;
-                    margin: 20px 0;
-                    color: #856404;
-                }
-                .link-fallback {
-                    word-break: break-word;
-                    background-color: #e3f2fd;
-                    padding: 10px;
-                    border-radius: 3px;
-                    font-family: monospace;
-                    font-size: 12px;
-                    color: #0d47a1;
-                }
-            </style>
+            <title>Email Confirmation</title>
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <div class="logo">{{ app_name }}</div>
-                </div>
-
-                <div class="content">
-                    <h2>Verify Your Email</h2>
-
-                    <p>Hello {{ name }},</p>
-
-                    <p>Thank you for signing up! Please confirm your email address by clicking the button below:</p>
-
-                    <div style="text-align: center;">
-                        <a href="{{ verification_url }}" class="button">Verify Email</a>
-                    </div>
-
-                    <div class="warning">
-                        <strong>⚠️ Note:</strong> This link will expire in 60 minutes for security reasons.
-                    </div>
-
-                    <p>If the button doesn’t work, copy and paste this link into your browser:</p>
-                    <div class="link-fallback">{{ verification_url }}</div>
-
-                    <p>Welcome aboard!<br>The {{ app_name }} Team</p>
-                </div>
-
-                <div class="footer">
-                    <p>This is an automated email. Please do not reply to this message.</p>
-                    <p>&copy; {{ current_year }} {{ app_name }}. All rights reserved.</p>
-                </div>
-            </div>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; color: #333333;">
+            <!-- Main container table -->
+            <table width="100%" cellspacing="0" cellpadding="0" border="0" align="center" style="max-width: 600px;">
+                <!-- Header -->
+                <tr>
+                    <td bgcolor="#14B8A6" style="padding: 30px 20px; text-align: center;">
+                        <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                                <td style="color: #ffffff; font-size: 28px; font-weight: bold; font-family: Arial, sans-serif;">
+                                    {{ app_name }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="color: #E0F2F1; font-size: 14px; padding-top: 8px; font-family: Arial, sans-serif;">
+                                    Protecting Our Oceans Through AI
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                
+                <!-- Content -->
+                <tr>
+                    <td bgcolor="#ffffff" style="padding: 30px 20px;">
+                        <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                                <td style="color: #0D9488; font-size: 24px; font-weight: bold; padding-bottom: 20px; font-family: Arial, sans-serif;">
+                                    Welcome Aboard! 🐠
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="font-size: 16px; line-height: 1.5; padding-bottom: 15px; font-family: Arial, sans-serif;">
+                                    Hello {{ name }},
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="font-size: 16px; line-height: 1.5; padding-bottom: 20px; font-family: Arial, sans-serif;">
+                                    Thank you for joining our mission to protect coral reefs through AI-powered bleaching detection.
+                                </td>
+                            </tr>
+                            
+                            <!-- Features box -->
+                            <tr>
+                                <td bgcolor="#F0FDF4" style="border-left: 4px solid #14B8A6; padding: 20px; margin-bottom: 20px; font-family: Arial, sans-serif;">
+                                    <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                            <td style="font-size: 16px; font-weight: bold; padding-bottom: 10px; font-family: Arial, sans-serif;">
+                                                With {{ app_name }}, you can:
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="font-size: 15px; line-height: 1.5; padding-left: 10px; font-family: Arial, sans-serif;">
+                                                • Analyze coral health with cutting-edge AI technology<br>
+                                                • Receive instant bleaching severity assessments<br>
+                                                • Contribute to global coral conservation research<br>
+                                                • Monitor reef health changes over time
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            
+                            <!-- Verification button -->
+                            <tr>
+                                <td align="center" style="padding: 30px 0;">
+                                    <table cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                            <td align="center" bgcolor="#14B8A6" style="border-radius: 50px;">
+                                                <a href="{{ verification_url }}" target="_blank" style="display: inline-block; padding: 16px 36px; color: #ffffff; font-size: 16px; font-weight: bold; text-decoration: none; font-family: Arial, sans-serif;">Verify My Email</a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            
+                            <!-- Warning -->
+                            <tr>
+                                <td bgcolor="#FEF3C7" style="border: 2px solid #F59E0B; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-family: Arial, sans-serif;">
+                                    <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                            <td style="color: #92400E; font-weight: bold; padding-bottom: 5px; font-family: Arial, sans-serif;">
+                                                ⚠️ Important:
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="color: #78350F; font-size: 14px; font-family: Arial, sans-serif;">
+                                                This verification link expires in {{ expires_minutes }} minutes.
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            
+                            <!-- Fallback link -->
+                            <tr>
+                                <td style="font-size: 15px; line-height: 1.5; padding-bottom: 10px; font-family: Arial, sans-serif;">
+                                    If the button doesn't work, copy and paste this link into your browser:
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="background-color: #F3F4F6; border: 1px solid #E5E7EB; padding: 15px; word-break: break-all; font-family: 'Courier New', monospace; font-size: 13px; margin-bottom: 20px;">
+                                    {{ verification_url }}
+                                </td>
+                            </tr>
+                            
+                            <!-- Closing -->
+                            <tr>
+                                <td style="border-top: 2px solid #F3F4F6; padding-top: 20px; margin-top: 20px; font-family: Arial, sans-serif;">
+                                    <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                            <td style="font-size: 15px; line-height: 1.5; padding-bottom: 5px; font-family: Arial, sans-serif;">
+                                                Together, we can protect our ocean's vital ecosystems!
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td style="color: #0D9488; font-weight: bold; font-family: Arial, sans-serif;">
+                                                The {{ app_name }} Team
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                
+                <!-- Footer -->
+                <tr>
+                    <td bgcolor="#F9FAFB" style="padding: 20px; text-align: center; border-top: 1px solid #E5E7EB; font-family: Arial, sans-serif;">
+                        <table width="100%" cellspacing="0" cellpadding="0" border="0">
+                            <tr>
+                                <td style="color: #6B7280; font-size: 12px; padding-bottom: 5px; font-family: Arial, sans-serif;">
+                                    This is an automated email. Please do not reply to this message.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="color: #6B7280; font-size: 12px; padding-bottom: 5px; font-family: Arial, sans-serif;">
+                                    Need help? Contact us at <a href="mailto:support@{{ app_name | lower }}.com" style="color: #14B8A6; text-decoration: none;">support@{{ app_name | lower }}.com</a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="color: #6B7280; font-size: 12px; font-family: Arial, sans-serif;">
+                                    © {{ current_year }} {{ app_name }}. All rights reserved.
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
         """
 
+        # Plain text version
         text_template = """
-        Verify Your Email - {{ app_name }}
+        ===============================================
+        🐠 Welcome to {{ app_name }}!
+        ===============================================
 
         Hello {{ name }},
 
-        Thank you for signing up! Please confirm your email address by clicking the link below:
+        Thank you for joining our mission to protect coral reefs through AI-powered bleaching detection.
+
+        --------------------------------------------------
+        WHAT YOU CAN DO WITH {{ app_name }}:
+        --------------------------------------------------
+
+        • Analyze coral health with cutting-edge AI technology
+        • Receive instant bleaching severity assessments
+        • Contribute to global coral conservation research
+        • Monitor reef health changes over time
+
+        --------------------------------------------------
+        ACTIVATE YOUR ACCOUNT
+        --------------------------------------------------
+
+        To get started and begin making a difference, please verify your email address by clicking the link below:
 
         {{ verification_url }}
 
-        ⚠️ Note: This link will expire in 24 hours minutes for security reasons.
+        ⚠️ IMPORTANT: This verification link expires in {{ expires_minutes }} minutes.
 
-        Welcome aboard!
+        --------------------------------------------------
+        HAVING TROUBLE?
+        --------------------------------------------------
+
+        If the button doesn't work, copy and paste the entire link above into your browser's address bar.
+
+        --------------------------------------------------
+
+        Together, we can protect our ocean's vital ecosystems!
 
         The {{ app_name }} Team
 
-        ---
+        ===============================================
         This is an automated email. Please do not reply to this message.
+        Need help? Contact us at support@{{ app_name | lower }}.com
         © {{ current_year }} {{ app_name }}. All rights reserved.
+        ===============================================
         """
 
         template_vars = {
             "name": name,
             "app_name": settings.APP_NAME,
-            "verification_url": verification_url,
+            "verification_url": safe_verification_url,
             "expires_minutes": expires_mins,
             "current_year": datetime.now().year,
         }
 
-        html_content = Template(html_template).render(**template_vars)
-        text_content = Template(text_template).render(**template_vars)
+        try:
+            # Render templates
+            html_content = Template(html_template).render(**template_vars)
+            text_content = Template(text_template).render(**template_vars)
 
-        return await self.send_email(
-            to_email=email,
-            subject=subject,
-            html_content=html_content,
-            text_content=text_content,
-            to_name=name,
-        )
+            # Inline CSS styles
+            html_content_inlined = transform(html_content)
+
+            # Send email
+            return await self.send_email(
+                to_email=email,
+                subject=subject,
+                html_content=html_content_inlined,
+                text_content=text_content,
+                to_name=name,
+            )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to send verification email to {email}: {str(e)}", exc_info=True
+            )
+            return False
 
     async def send_web_update_email_to_admins(
         self, emails: List[str], name: str, title: str, content: str

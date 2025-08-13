@@ -1,6 +1,7 @@
 import logging
 
-from sqlalchemy import select, delete, update, or_
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import select, delete, update, and_, or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -164,3 +165,39 @@ def change_password(db: Session, id: UUID, new_password: str) -> Optional[User]:
         db.rollback()
         logger.error(f"{LOG_MSG} error changing password: {str(e)}")
         return None
+
+
+def deactivate_inactive_accounts(db: Session) -> Optional[bool]:
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=90)
+
+    query = (
+        update(User)
+        .where(and_(User.last_login < cutoff_date, User.is_active == True))
+        .values(is_active=False)
+    )
+
+    try:
+        db.execute(query)
+        db.commit()
+
+        return True
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error updating user active status: {str(e)}")
+        return False
+
+
+def modify_last_login(db: Session, id: UUID) -> Optional[bool]:
+    query = (
+        update(User).where(User.id == id).values(last_login=datetime.now(timezone.utc))
+    )
+
+    try:
+        db.execute(query)
+        db.commit()
+
+        return True
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error updating last login date: {str(e)}")
+        return False
