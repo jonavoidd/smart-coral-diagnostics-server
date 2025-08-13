@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from fastapi.security import (
@@ -17,7 +19,7 @@ from app.schemas.user import UserOut
 from app.utils.token import TokenSecurity
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
-
+logger = logging.getLogger(__name__)
 
 credentials_exception = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -47,7 +49,7 @@ BACKEND_DEBUG = False
 
 
 if not BACKEND_DEBUG:
-
+    # local auth
     async def get_current_user(
         request: Request, db: Session = Depends(get_db)
     ) -> UserOut:
@@ -83,6 +85,34 @@ if not BACKEND_DEBUG:
             raise credentials_exception
 
         return user
+
+    # supabase auth
+    # async def get_current_user(request: Request):
+    #     auth_header = request.headers.get("Authorization")
+    #     if not auth_header or auth_header.startswith("Bearer "):
+    #         raise HTTPException(
+    #             status_code=status.HTTP_401_UNAUTHORIZED, detail="missing access token"
+    #         )
+
+    #     token = auth_header.split(" ")[1]
+    #     try:
+    #         payload = jwt.decode(
+    #             token, settings.SUPABASE_JWT_KEY, algorithms=settings.ALGORITHM
+    #         )
+    #         user_id = payload.get("sub")
+
+    #         if user_id is None:
+    #             raise HTTPException(
+    #                 status_code=status.HTTP_401_UNAUTHORIZED,
+    #                 detail="invalid token payload",
+    #             )
+    #         return user_id
+    #     except Exception as e:
+    #         logger.error(f"failed to authenticate user: {str(e)}")
+    #         raise HTTPException(
+    #             status_code=status.HTTP_401_UNAUTHORIZED,
+    #             detail="invalid or expired token",
+    #         )
 
 else:
 

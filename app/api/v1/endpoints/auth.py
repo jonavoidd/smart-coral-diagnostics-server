@@ -2,7 +2,7 @@ import logging
 import secrets
 
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from app.crud.user import (
     create_social_user,
     update_user_details,
 )
+from app.crud.user import update_user_details, modify_last_login
 from app.crud.verify_token import get_verification_token, store_verification_token
 from app.db.connection import get_db
 from app.schemas.token import Token
@@ -81,6 +82,8 @@ def login(
             "first_name": user.first_name,
             "last_name": user.last_name,
         }
+
+        modify_last_login(db, user.id)
 
         access_token = TokenSecurity.create_access_token(
             user.email, user_data=user_data
@@ -376,3 +379,9 @@ def verify_email(token: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="email verification failed",
         )
+
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie("access_token", path="/")
+    return {"message": "logged out"}
