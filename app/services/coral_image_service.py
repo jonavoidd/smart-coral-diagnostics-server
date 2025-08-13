@@ -8,6 +8,7 @@ from typing import List
 from uuid import uuid4, UUID
 
 from app.core.supabase_client import supabase
+from app.crud.archived_image import store_archived_data
 from app.crud.coral_images import (
     save_analysis_results,
     store_coral_image,
@@ -16,12 +17,14 @@ from app.crud.coral_images import (
     get_coral_location,
     get_images_by_user,
     get_image_by_id,
+    update_image_details,
     delete_image,
     delete_selected_images,
     log_analytics_event,
 )
+from app.schemas.archived_image import CreateArchivedImage
 from app.schemas.audit_trail import CreateAuditTrail
-from app.schemas.coral_image import CoralImageCreate, CoralImageOut
+from app.schemas.coral_image import CoralImageCreate, CoralImageOut, UpdateCoralImage
 from app.schemas.user import UserOut
 from app.services.ai_inference import run_inference, run_llm_inference
 from app.services.audit_trail_service import audit_trail_service
@@ -38,6 +41,9 @@ def upload_image_to_supabase_service(
     original_filename: str,
     latitude: float,
     longitude: float,
+    water_temperature: str,
+    water_depth: float,
+    observation_date: datetime,
     user: UserOut,
 ):
     unique_filename = f"{uuid4()}_{original_filename}"
@@ -58,27 +64,33 @@ def upload_image_to_supabase_service(
         file_url=file_url,
         filename=unique_filename,
         original_upload_name=original_filename,
-        uploaded_at=datetime.now(timezone.utc),
         processed=True,
         latitude=latitude,
         longitude=longitude,
+        water_temperature=water_temperature,
+        water_depth=water_depth,
+        observatiton_date=observation_date,
+        uploaded_at=datetime.now(timezone.utc),
     )
     stored_image = store_coral_image(db, image_data)
 
     try:
         result_data = run_inference(file_url)
-        analysis_result = save_analysis_results(db, stored_image.id, result_data)
 
         llm_response = run_llm_inference(
-            image_data.latitude,
-            image_data.longitude,
-            result_data["classification_labels"],
+            latitude=image_data.latitude,
+            longitude=image_data.longitude,
+            classification=result_data["classification_labels"],
+            bleaching_percentage=result_data["bleaching_percentage"],
+            water_temp=water_temperature,
+            water_depth=water_depth,
+            observation_date=observation_date,
         )
 
         try:
             llm_res_cleaned = llm_response["choices"][0]["message"]["content"]
         except (KeyError, IndexError):
-            llm_res_cleaned = "No explanation cound be generated at this time."
+            llm_res_cleaned = "No explanation could be generated at this time."
 
         split_marker = "Recommended Actions:"
         if split_marker in llm_res_cleaned:
@@ -98,6 +110,10 @@ def upload_image_to_supabase_service(
             "<ul>" + "".join(f"<li>{line}" for line in bullet_lines) + "</ul>"
             if bullet_lines
             else ""
+        )
+
+        analysis_result = save_analysis_results(
+            db, stored_image.id, result_data, description_text, recommended_text
         )
 
         log_analytics_event(
@@ -125,6 +141,7 @@ def upload_image_to_supabase_service(
             "result": {
                 "label": result_data["classification_labels"],
                 "confidence": result_data["confidence_score"],
+                "bleaching_percentage": result_data["bleaching_percentage"],
                 "model_version": result_data["model_version"],
             },
             "image_id": stored_image.id,
@@ -227,6 +244,22 @@ def get_single_image_service(db: Session, id: UUID):
         )
 
 
+def edit_image_details(db: Session, id: UUID, payload: UpdateCoralImage):
+    try:
+        result = update_image_details(db, id, payload)
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="image not found"
+            )
+        return result
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error updating image details: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="failed to update image details",
+        )
+
+
 def delete_single_image_service(db: Session, id: UUID, user: UserOut):
     image = get_image_by_id(db, id)
     if not image:
@@ -237,13 +270,39 @@ def delete_single_image_service(db: Session, id: UUID, user: UserOut):
     filename = image.filename
 
     try:
-        supabase.storage.from_("coral-images").remove([filename])
+        analysis = image.analysis_results[0] if image.analysis_results else None
+
+        archived_payload = CreateArchivedImage(
+            file_url=image.file_url,
+            filename=image.filename,
+            original_upload_name=image.original_upload_name,
+            latitude=image.latitude,
+            longitude=image.longitude,
+            water_temperature=image.water_temperature,
+            water_depth=image.water_depth,
+            uploaded_at=image.uploaded_at,
+            confidence_score=analysis.confidence_score if analysis else None,
+            classification_labels=analysis.classification_labels if analysis else None,
+            model_version=analysis.model_version if analysis else None,
+            description=analysis.model_version if analysis else None,
+            recommendations=analysis.recommendations if analysis else None,
+        )
+        store_archived_data(db, archived_payload)
     except Exception as e:
-        logger.error(f"{LOG_MSG} error deleting image from supabase storage: {str(e)}")
+        logger.error(f"{LOG_MSG} error archiving data: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Deleting image from storage failed",
+            detail=f"error archiving: {str(e)}",
         )
+
+    # try:
+    #     supabase.storage.from_("coral-images").remove([filename])
+    # except Exception as e:
+    #     logger.error(f"{LOG_MSG} error deleting image from supabase storage: {str(e)}")
+    #     raise HTTPException(
+    #         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #         detail="Deleting image from storage failed",
+    #     )
 
     audit = CreateAuditTrail(
         actor_id=user.id,

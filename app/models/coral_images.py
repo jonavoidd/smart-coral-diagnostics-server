@@ -26,10 +26,13 @@ class CoralImages(Base):
     file_url = Column(String(255), nullable=False)
     filename = Column(String(255), nullable=False)
     original_upload_name = Column(String(255), nullable=False)
-    uploaded_at = Column(DateTime, server_default=func.now(), nullable=False)
     processed = Column(Boolean, server_default="false", nullable=False)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    water_temperature = Column(String(124), nullable=True)
+    water_depth = Column(Float, nullable=True)
+    observation_date = Column(DateTime, nullable=True)
+    uploaded_at = Column(DateTime, server_default=func.now(), nullable=False)
 
     analysis_results = relationship(
         "AnalysisResult",
