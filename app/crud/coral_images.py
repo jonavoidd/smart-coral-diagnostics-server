@@ -10,7 +10,12 @@ from uuid import UUID
 from app.models.analysis_results import AnalysisResult
 from app.models.analytics_events import AnalyticsEvent
 from app.models.coral_images import CoralImages
-from app.schemas.coral_image import CoralImageCreate, CoralImageLocation
+from app.schemas.coral_image import (
+    CoralImageCreate,
+    CoralImageLocation,
+    CoralImageOut,
+    UpdateCoralImage,
+)
 
 logger = logging.getLogger(__name__)
 LOG_MSG = "CRUD:"
@@ -32,7 +37,11 @@ def store_coral_image(db: Session, data: CoralImageCreate) -> Optional[CoralImag
 
 
 def save_analysis_results(
-    db: Session, image_id: str, result_data: Dict
+    db: Session,
+    image_id: str,
+    result_data: Dict,
+    description: str,
+    recommendations: str,
 ) -> AnalysisResult:
     image = AnalysisResult(
         image_id=image_id,
@@ -41,6 +50,8 @@ def save_analysis_results(
         bounding_boxes=result_data["bounding_boxes"],
         model_version=result_data["model_version"],
         analysis_duration=result_data["analysis_duration"],
+        description=description,
+        recommendations=recommendations,
     )
 
     try:
@@ -86,7 +97,7 @@ def get_all_images(db: Session) -> List[CoralImages]:
         return None
 
 
-def get_all_images_with_results(db: Session):
+def get_all_images_with_results(db: Session) -> List[CoralImageOut]:
     try:
         return (
             db.query(CoralImages)
@@ -135,6 +146,28 @@ def get_image_by_id(db: Session, id: UUID) -> CoralImages:
     except SQLAlchemyError as e:
         logger.error(f"{LOG_MSG} error getting images: {str(e)}")
         return None
+
+
+def update_image_details(
+    db: Session, id: UUID, payload: UpdateCoralImage
+) -> Optional[CoralImages]:
+    new_data = payload.model_dump(exclude_unset=True)
+    query = (
+        update(CoralImages)
+        .where(CoralImages.id == id)
+        .values(**new_data)
+        .returning(CoralImages)
+    )
+
+    try:
+        result = db.execute(query)
+        db.commit()
+
+        return result.scalar_one_or_none()
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error updating coral image data: {str(e)}")
+        raise
 
 
 def delete_image(db: Session, id: UUID):

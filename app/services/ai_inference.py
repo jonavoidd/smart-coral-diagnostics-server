@@ -4,12 +4,16 @@ import requests
 import time
 import torch
 
+from datetime import datetime
 from fastapi import HTTPException, status
 from io import BytesIO
 from huggingface_hub import hf_hub_download
+from pathlib import Path
 from PIL import Image
+import torch
 from torch import nn
 from torchvision import models, transforms
+from torchvision.models import resnet50, ResNet50_Weights
 from transformers import pipeline
 from typing import Dict
 
@@ -18,68 +22,85 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 LOG_MSG = "Service:"
 
-
-# class CoralBleachingModel(nn.Module):
-#     """ResNet50-based model for coral bleaching detection"""
-
-#     def __init__(self, num_classes=2, pretrained=True):
-#         super(CoralBleachingModel, self).__init__()
-
-#         # Load Pretained ResNet50
-#         if pretrained:
-#             self.backbone = models.resnet50(
-#                 weights=models.ResNet50_Weights.IMAGENET1K_V2
-#             )
-#         else:
-#             self.backbone = models.resnet50(weights=None)
-
-#         # Modify the fianl layer
-#         num_features = self.backbone.fc.in_features
-#         self.backbone.fc = nn.Sequential(
-#             nn.Dropout(0.5),
-#             nn.Linear(num_features, 512),
-#             nn.ReLU(),
-#             nn.Dropout(0.3),
-#             nn.Linear(512, num_classes),
-#         )
-
-#     def forward(self, x):
-#         return self.backbone(x)
+BASE_DIR = Path(__file__).resolve().parent.parent
+coral_classification_model = BASE_DIR / "ai_model" / "coral_classification_model.pt"
 
 
-# MODEL_FILENAME = settings.HF_MODEL_FILENAME
+class CoralBleachingModel(nn.Module):
+    """ResNet50-based model for coral bleaching detection with classification and regression outputs."""
+
+    def __init__(self, num_classes=5, pretrained=True):
+        super(CoralBleachingModel, self).__init__()
+
+        # Load Pretrained ResNet50
+        if pretrained:
+            self.backbone = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
+        else:
+            self.backbone = resnet50(weights=None)
+
+        # Modify the final layer
+        num_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Identity()
+
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(num_features, 512),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(512, num_classes),
+        )
+
+        # Regression head for bleaching percentage
+        self.regressor = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(num_features, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        features = self.backbone(x)
+        class_output = self.classifier(features)
+        bleaching_output = self.regressor(features) * 100  # Scale to percentage
+        return class_output, bleaching_output
+
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+checkpoint = torch.load(coral_classification_model, map_location=device)
+
+num_classes = checkpoint["num_classes"]
+class_names = checkpoint["class_names"]
+
+model = CoralBleachingModel(num_classes=5, pretrained=False)
+model.load_state_dict(checkpoint["model_state_dict"])
+model.eval()
+model = model.to(device)
+
+transform = transforms.Compose(
+    [
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+
+
 # MODEL_ID = f"{settings.HF_USERNAME}/{settings.HF_MODEL_NAME}"
-# model_path = hf_hub_download(repo_id=MODEL_ID, filename=MODEL_FILENAME)
-
-# model = CoralBleachingModel(num_classes=2)
-# model.load_state_dict(torch.load(model_path, map_location="cpu"))
-# model.eval()
-
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# model.to(device)
-# # model = pipeline("image-classification", model=MODEL_ID, device=device)
-
-# transform = transforms.Compose(
-#     [
-#         transforms.Resize((224, 224)),
-#         transforms.ToTensor(),
-#         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-#     ]
-# )
-
-MODEL_ID = f"{settings.HF_USERNAME}/{settings.HF_MODEL_NAME}"
 
 
-device = 0 if torch.cuda.is_available() else -1
-model = pipeline("image-classification", model=MODEL_ID, device=device)
+# device = 0 if torch.cuda.is_available() else -1
+# model = pipeline("image-classification", model=MODEL_ID, device=device)
 
 
-LABEL_MAP = {
-    "51_tabular_hard_coral": "Tabular Hard Coral",
-    "polar white bleaching": "Polar White Bleaching",
-    "slight pale bleaching": "Slight Pale Bleaching",
-    "very pale bleaching": "Very Pale Bleaching",
-}
+# LABEL_MAP = {
+#     "51_tabular_hard_coral": "Tabular Hard Coral",
+#     "polar white bleaching": "Polar White Bleaching",
+#     "slight pale bleaching": "Slight Pale Bleaching",
+#     "very pale bleaching": "Very Pale Bleaching",
+# }
 
 
 def run_inference(image_path: str) -> Dict:
@@ -92,8 +113,27 @@ def run_inference(image_path: str) -> Dict:
         else:
             image = Image.open(image_path).convert("RGB")
 
-        result = model(image)
-        top = max(result, key=lambda x: x["score"])
+        input_tensor = transform(image).unsqueeze(0).to(device)
+
+        with torch.no_grad():
+            class_logits, bleaching_output = model(input_tensor)
+            probs = torch.softmax(class_logits, dim=1)
+            predicted_idx = torch.argmax(probs, dim=1).item()
+            predicted_label = class_names[predicted_idx]
+            confidence_score = probs[0][predicted_idx].item()
+            bleaching_percentage = bleaching_output.item()
+
+        return {
+            "classification_labels": predicted_label,
+            "confidence_score": round(confidence_score, 4),
+            "bleaching_percentage": round(bleaching_percentage, 2),
+            "bounding_boxes": None,
+            "model_version": "coral-classification-model",
+            "analysis_duration": round(time.time() - start_time, 4),
+        }
+
+        # result = model(image)
+        # top = max(result, key=lambda x: x["score"])
 
         # return {
         #     "classification_labels": LABEL_MAP.get(top["label"], top["label"]),
@@ -103,35 +143,51 @@ def run_inference(image_path: str) -> Dict:
         #     "analysis_duration": time.time() - start_time,
         # }
 
-        return {
-            "classification_labels": top["label"],
-            "confidence_score": float(top["score"]),
-            "bounding_boxes": None,
-            "model_version": MODEL_ID,
-            "analysis_duration": time.time() - start_time,
-        }
+        # return {
+        #     "classification_labels": top["label"],
+        #     "confidence_score": float(top["score"]),
+        #     "bounding_boxes": None,
+        #     "model_version": MODEL_ID,
+        #     "analysis_duration": time.time() - start_time,
+        # }
 
     except Exception as e:
+        logger.error(f"error making an inference on image: {str(e)}")
         raise RuntimeError(f"inference failed: {str(e)}")
 
 
-def run_llm_inference(latitude: float, longitude: float, classification: str):
+def run_llm_inference(
+    latitude: float,
+    longitude: float,
+    classification: str,
+    bleaching_percentage: float,
+    water_temp: str,
+    water_depth: float,
+    observation_date: datetime,
+):
     prompt = f"""
-    A coral image taken from latitude: {latitude}, longitude: {longitude} was classified as {classification}.
-    1. Please explain the classification result to the user who uploaded the image.
-    2. Describe the possible environmental issues in the region that may have caused this result, no need to mention the latitude and longitude anymore and only the general area.
-    3. Explain how these issues could affect the local marine ecosystem and their broader impacts.
-    4. Finally, provide a list of recommended actions that the user or community could take to help mitigate these issues.
-       Present this list in bullet points.
+    A coral image was captured at latitude {latitude}, longitude {longitude}, and has been classified as: {classification} with a bleaching percent of {bleaching_percentage}. 
+    At the time of observation on {observation_date}, the water temperature was {water_temp} at a depth of {water_depth} meters.
 
-    Please structure your response clearly with two sections:
-    - Description:
-      [Your explanation here]
-    - Recommended Actions:
-      - Action 1
-      - Action 2
-      - ...
+    Please provide the following in your response:
+
+    1. **Explain the classification result** in simple terms for the user who submitted the image, including what the classification means for the coral's health or condition.
+    2. **Discuss potential environmental issues** in the general region (no need to mention exact coordinates) that could have contributed to this classification result.
+    3. **Describe how these environmental factors** may affect the local marine ecosystem and the broader ecological consequences.
+    4. **Suggest a list of actionable recommendations** that the user or local community can take to help address or reduce these environmental impacts.
+
+    Please structure your response with the following two clear sections:
+
+    - **Description**:
+    [Your detailed explanation goes here]
+
+    - **Recommended Actions**:
+    - [Action 1]
+    - [Action 2]
+    - [Action 3]
+    ...
     """
+
     try:
         response = requests.post(
             # url="https://openrouter.ai/api/v1/chat/completions",
@@ -143,6 +199,7 @@ def run_llm_inference(latitude: float, longitude: float, classification: str):
             data=json.dumps(
                 {
                     "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+                    # uncomment openrouter and comment apitogether when using the models below
                     # "model": "deepseek/deepseek-chat-v3-0324:free",
                     # "model": "moonshotai/kimi-k2:free",
                     # "model": "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",

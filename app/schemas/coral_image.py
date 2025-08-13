@@ -15,9 +15,12 @@ class PartialAnalysisResult(BaseModel):
     id: UUID
     image_id: UUID
     confidence_score: float
+    bleaching_percentage: float
     classification_labels: str
     analysis_duration: float
     analyzed_at: datetime
+    description: Optional[str]
+    recommendations: Optional[str]
 
 
 class BaseCoralImage(BaseModel):
@@ -25,10 +28,20 @@ class BaseCoralImage(BaseModel):
     file_url: Optional[str] = None
     filename: Optional[str] = None
     original_upload_name: Optional[str] = None
-    uploaded_at: datetime = None
     processed: Optional[bool] = False
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    water_temperature: Optional[str] = None
+    water_depth: Optional[float] = None
+    observation_date: Optional[datetime] = None
+    uploaded_at: datetime = None
+
+
+class UpdateCoralImage(BaseModel):
+    latitude: Optional[float]
+    longitude: Optional[float]
+    water_temperature: Optional[str]
+    water_depth: Optional[float]
 
 
 class CoralImageCreate(BaseCoralImage):
