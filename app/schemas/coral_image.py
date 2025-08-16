@@ -15,7 +15,7 @@ class PartialAnalysisResult(BaseModel):
     id: UUID
     image_id: UUID
     confidence_score: float
-    bleaching_percentage: float
+    bleaching_percentage: Optional[float]
     classification_labels: str
     analysis_duration: float
     analyzed_at: datetime

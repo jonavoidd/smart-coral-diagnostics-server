@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from app.core.auth import require_role
@@ -27,6 +27,16 @@ def select(id: UUID, db: Session = Depends(get_db)):
 @router.get("/", response_model=List[WebsiteContentOut])
 def select_all(db: Session = Depends(get_db)):
     return website_content_service.get_all_contents(db)
+
+
+@router.get("/section/{section}", response_model=Optional[List[WebsiteContentOut]])
+def select_content_by_section(section: str, db: Session = Depends(get_db)):
+    content = website_content_service.get_content_by_section(db, section)
+    if content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="no content found"
+        )
+    return content
 
 
 @router.post("/")

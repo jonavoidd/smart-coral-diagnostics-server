@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 from uuid import UUID
 
-from app.core.auth import require_role
 from app.crud.website_content import (
     select_content,
     select_all_content,
+    select_content_by_section,
     store_content,
     update_content as update,
     delete_content,
@@ -41,7 +41,10 @@ class WebsiteContentService:
             return content
         except Exception as e:
             logger.error(f"{LOG_MSG} error getting content: {str(e)}")
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to get content with id.",
+            )
 
     def get_all_contents(self, db: Session) -> Optional[List[WebsiteContentOut]]:
         try:
@@ -50,13 +53,36 @@ class WebsiteContentService:
             if not all_content:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="error getting all contents",
+                    detail="error getting all contents.",
                 )
 
             return all_content
         except Exception as e:
             logger.error(f"{LOG_MSG} error getting all content: {str(e)}")
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to get all content.",
+            )
+
+    def get_content_by_section(
+        self, db: Session, section: str
+    ) -> Optional[List[WebsiteContentOut]]:
+        try:
+            contents = select_content_by_section(db, section)
+
+            if not contents:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="content with given section not found.",
+                )
+
+            return contents
+        except Exception as e:
+            logger.error(f"{LOG_MSG} error getting content with section: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to get content with section.",
+            )
 
     def insert_content(
         self, db: Session, payload: WebsiteContentCreate, user: UserOut
@@ -76,7 +102,10 @@ class WebsiteContentService:
             return {"message": "successfully inserted new content", "data": content}
         except Exception as e:
             logger.error(f"{LOG_MSG} error adding new content: {str(e)}")
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to insert new content.",
+            )
 
     def update_content(
         self, db: Session, id: UUID, payload: WebsiteContentUpdate, user: UserOut
@@ -96,7 +125,10 @@ class WebsiteContentService:
             return {"message": "successfully updated content data"}
         except Exception as e:
             logger.error(f"{LOG_MSG} error updating content: {str(e)}")
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to update content.",
+            )
 
     def remove_content(self, db: Session, id: UUID, user: UserOut) -> Dict[str, str]:
         try:
@@ -114,7 +146,10 @@ class WebsiteContentService:
             return {"message": "successfully deleted content data"}
         except Exception as e:
             logger.error(f"{LOG_MSG} error adding new content: {str(e)}")
-            return None
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="failed to delete content.",
+            )
 
 
 website_content_service = WebsiteContentService()

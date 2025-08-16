@@ -166,7 +166,7 @@ def run_llm_inference(
     observation_date: datetime,
 ):
     prompt = f"""
-    A coral image was captured at latitude {latitude}, longitude {longitude}, and has been classified as: {classification} with a bleaching percent of {bleaching_percentage}. 
+    A coral image was captured at latitude {latitude}, longitude {longitude}, and has been classified as: {classification} with a bleaching percent of {bleaching_percentage}%. 
     At the time of observation on {observation_date}, the water temperature was {water_temp} at a depth of {water_depth} meters.
 
     Please provide the following in your response:

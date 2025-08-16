@@ -46,6 +46,7 @@ def save_analysis_results(
     image = AnalysisResult(
         image_id=image_id,
         confidence_score=result_data["confidence_score"],
+        bleaching_percentage=result_data["bleaching_percentage"],
         classification_labels=result_data["classification_labels"],
         bounding_boxes=result_data["bounding_boxes"],
         model_version=result_data["model_version"],
