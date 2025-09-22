@@ -17,7 +17,11 @@ from app.crud.user import (
     update_user_details,
 )
 from app.crud.user import update_user_details, modify_last_login
-from app.crud.verify_token import get_verification_token, store_verification_token
+from app.crud.verify_token import (
+    get_verification_token,
+    store_verification_token,
+    verify_token_and_mark_used,
+)
 from app.db.connection import get_db
 from app.schemas.token import Token
 from app.schemas.user import CreateUser, UpdateUser
@@ -282,12 +286,13 @@ async def social_callback(
             user_info = token.get("userinfo")
             if not user_info:
                 response = await client.get(
-                    "https://googleapis.com/oauth2/v2/userinfo", token=token
+                    "https://www.googleapis.com/oauth2/v2/userinfo", token=token
                 )
                 user_info = response.json()
 
         email = user_info.get("email")
-        name = user_info.get("name")
+        first_name = user_info.get("given_name")
+        last_name = user_info.get("family_name")
         profile = user_info.get("picture")
         provider_id = user_info.get("sub") or user_info.get("id")
 
@@ -302,7 +307,8 @@ async def social_callback(
         if existing_user:
             if existing_user.provider == "local":
                 user = UpdateUser(
-                    first_name=name,
+                    first_name=first_name,
+                    last_name=last_name,
                     email=email,
                     provider=provider,
                     provider_id=provider_id,
@@ -317,12 +323,12 @@ async def social_callback(
         else:
             user = create_social_user(
                 db=db,
-                name=name,
+                first_name=first_name,
+                last_name=last_name,
                 email=email,
                 provider=provider,
-                provider_id=-provider_id,
+                provider_id=provider_id,
                 profile=profile,
-                is_verified=True,
             )
 
         user_data = {
@@ -366,6 +372,14 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         verification_token = get_verification_token(db, token)
 
         if not verification_token:
+            return RedirectResponse(
+                f"{settings.FRONTEND_URL}/verify-email?status=failed"
+            )
+
+        # Actually verify the user and mark the token as used
+        success = verify_token_and_mark_used(db, verification_token)
+
+        if not success:
             return RedirectResponse(
                 f"{settings.FRONTEND_URL}/verify-email?status=failed"
             )

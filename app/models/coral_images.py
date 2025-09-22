@@ -23,10 +23,14 @@ class CoralImages(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
+    name = Column(String(255), nullable=True)
     file_url = Column(String(255), nullable=False)
     filename = Column(String(255), nullable=False)
     original_upload_name = Column(String(255), nullable=False)
     processed = Column(Boolean, server_default="false", nullable=False)
+
+    is_public = Column(Boolean, server_default="true", nullable=False)
+
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     water_temperature = Column(String(124), nullable=True)

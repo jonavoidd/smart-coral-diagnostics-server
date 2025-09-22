@@ -42,6 +42,7 @@ def create_social_user(
     email: str,
     provider: str,
     provider_id: str,
+    profile: str,
 ) -> Optional[User]:
     user = User(
         first_name=first_name,
@@ -56,7 +57,7 @@ def create_social_user(
         role=1,
         is_active=False,
         last_login=None,
-        profile=None,
+        profile=profile,
     )
 
     try:
@@ -133,6 +134,20 @@ def update_user_details(db: Session, id: UUID, payload: UpdateUser) -> Optional[
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"{LOG_MSG} error updating user data: {str(e)}")
+        raise
+
+
+def update_user_profile(db: Session, id: UUID, profile: str) -> Optional[User]:
+    query = update(User).where(User.id == id).values(profile=profile)
+
+    try:
+        db.execute(query)
+        db.commit()
+
+        return db.query(User).filter(User.id == id).one_or_none()
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error updating profile picture: {str(e)}")
         raise
 
 

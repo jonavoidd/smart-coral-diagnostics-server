@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete, update, and_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 from typing import Dict, List, Optional
@@ -46,6 +46,7 @@ def save_analysis_results(
     image = AnalysisResult(
         image_id=image_id,
         confidence_score=result_data["confidence_score"],
+        bleaching_percentage=result_data["bleaching_percentage"],
         classification_labels=result_data["classification_labels"],
         bounding_boxes=result_data["bounding_boxes"],
         model_version=result_data["model_version"],
@@ -97,17 +98,55 @@ def get_all_images(db: Session) -> List[CoralImages]:
         return None
 
 
-def get_all_images_with_results(db: Session) -> List[CoralImageOut]:
+def get_all_images_with_results(db: Session) -> Optional[List[CoralImageOut]]:
     try:
-        return (
+        images = (
             db.query(CoralImages)
             .options(
                 joinedload(CoralImages.user), joinedload(CoralImages.analysis_results)
             )
             .all()
         )
+
+        filtered_images = [
+            img
+            for img in images
+            if any(
+                result.confidence_score is not None and result.confidence_score > 0.50
+                for result in img.analysis_results
+            )
+        ]
+
+        return filtered_images
+        # return [CoralImageOut.model_validate(img) for img in filtered_images]
     except SQLAlchemyError as e:
         logger.error(f"{LOG_MSG} error getting coral data: {str(e)}")
+        return None
+
+
+def get_public_images_with_results(db: Session) -> Optional[List[CoralImageOut]]:
+    try:
+        images = (
+            db.query(CoralImages)
+            .where(CoralImages.is_public == True)
+            .options(
+                joinedload(CoralImages.user), joinedload(CoralImages.analysis_results)
+            )
+            .all()
+        )
+
+        filtered_images = [
+            img
+            for img in images
+            if any(
+                result.confidence_score is not None and result.confidence_score > 0.50
+                for result in img.analysis_results
+            )
+        ]
+
+        return filtered_images
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting public coral data: {str(e)}")
         return None
 
 
@@ -131,9 +170,29 @@ def get_images_by_user(db: Session, id: UUID) -> Optional[List[CoralImages]]:
         query = select(CoralImages).where(CoralImages.user_id == id)
         result = db.execute(query).scalars().all()
 
-        return result
+        filtered_images = [
+            img
+            for img in result
+            if any(
+                results.confidence_score is not None and results.confidence_score > 0.50
+                for results in img.analysis_results
+            )
+        ]
+
+        return filtered_images
     except SQLAlchemyError as e:
         logger.error(f"{LOG_MSG} error getting images: {str(e)}")
+        return None
+
+
+def get_all_images_by_user(db: Session, id: UUID) -> Optional[List[CoralImages]]:
+    try:
+        query = select(CoralImages).where(CoralImages.user_id == id)
+        result = db.execute(query).scalars().all()
+
+        return result
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting all images by user: {str(e)}")
         return None
 
 
@@ -167,6 +226,40 @@ def update_image_details(
     except SQLAlchemyError as e:
         db.rollback()
         logger.error(f"{LOG_MSG} error updating coral image data: {str(e)}")
+        raise
+
+
+def change_coral_image_public_status(db: Session, id: UUID, status: bool) -> bool:
+    query = update(CoralImages).where(CoralImages.id == id).values(is_public=status)
+
+    try:
+        result = db.execute(query)
+        db.commit()
+
+        return result.rowcount > 0
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"{LOG_MSG} error updating image public status")
+        raise
+
+
+def change_all_user_coral_image_status(db: Session, user_id: UUID, status: bool) -> int:
+    query = (
+        update(CoralImages)
+        .where(and_(CoralImages.user_id == user_id, CoralImages.is_public != status))
+        .values(is_public=status)
+    )
+
+    try:
+        result = db.execute(query)
+        db.commit()
+
+        return result.rowcount
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(
+            f"{LOG_MSG} error updating all coral image publicity uploaded by user."
+        )
         raise
 
 

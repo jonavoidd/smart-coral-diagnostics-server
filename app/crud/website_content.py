@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import asc, select, update, delete
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -36,6 +36,25 @@ def select_all_content(db: Session) -> Optional[List[WebsiteContentOut]]:
         return content
     except SQLAlchemyError as e:
         logger.error(f"{LOG_MSG} error getting all content: {str(e)}")
+        return None
+
+
+def select_content_by_section(
+    db: Session, section: str
+) -> Optional[List[WebsiteContentOut]]:
+    query = (
+        select(WebsiteContent)
+        .where(WebsiteContent.section == section)
+        .order_by(asc(WebsiteContent.created_at))
+    )
+
+    try:
+        result = db.execute(query)
+        contents = result.scalars().all()
+
+        return [WebsiteContentOut.model_validate(c) for c in contents]
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error reading content: {str(e)}")
         return None
 
 

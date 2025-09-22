@@ -19,14 +19,19 @@ from app.db.connection import get_db
 from app.models.users import UserRole
 from app.schemas.coral_image import CoralImageOut, CoralImageLocation, UpdateCoralImage
 from app.schemas.user import UserOut
+from app.schemas.settings import Settings
 from app.services.coral_image_service import (
     upload_image_to_supabase_service,
     get_all_images_service,
     get_all_coral_data,
+    get_public_coral_data,
     get_all_coral_locations,
     get_image_for_user_service,
+    get_all_images_by_user_service,
     get_single_image_service,
     edit_image_details,
+    change_coral_image_publicity,
+    change_all_user_coral_image_publicity_status,
     delete_single_image_service,
     delete_multiple_images_service,
 )
@@ -40,11 +45,13 @@ router = APIRouter()
 
 @router.post("/")
 async def analyze_coral_image(
+    name: Optional[str] = Form(None),
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
     water_temperature: Optional[str] = Form(None),
     water_depth: Optional[float] = Form(None),
     observation_date: Optional[datetime] = Form(None),
+    is_public: Optional[bool] = Form(None),
     file: UploadFile = File(...),
     current_user: UserOut = Depends(
         require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
@@ -72,14 +79,16 @@ async def analyze_coral_image(
     try:
         return upload_image_to_supabase_service(
             db,
-            optimized,
-            file.filename,
-            latitude,
-            longitude,
-            water_temperature,
-            water_depth,
-            observation_date,
-            current_user,
+            file_bytes=optimized,
+            name=name,
+            original_filename=file.filename,
+            latitude=latitude,
+            longitude=longitude,
+            water_temperature=water_temperature,
+            water_depth=water_depth,
+            is_public=is_public,
+            observation_date=observation_date,
+            user=current_user,
         )
     except Exception as e:
         raise HTTPException(
@@ -105,6 +114,11 @@ def get_all_images(db: Session = Depends(get_db)):
 @router.get("/coral-data/", response_model=List[CoralImageOut])
 def get_coral_data(db: Session = Depends(get_db)):
     return get_all_coral_data(db)
+
+
+@router.get("/public-coral-data/", response_model=List[CoralImageOut])
+def get_public_coral(db: Session = Depends(get_db)):
+    return get_public_coral_data(db)
 
 
 @router.get("/coral-locations/", response_model=List[CoralImageLocation])
@@ -134,6 +148,11 @@ def get_user_images(
     return get_image_for_user_service(db, current_user.id)
 
 
+@router.get("/u/all", response_model=List[CoralImageOut])
+def get_all_images_by_user(id: UUID, db: Session = Depends(get_db)):
+    return get_all_images_by_user_service(db, id)
+
+
 @router.get("/id/{id}", response_model=CoralImageOut)
 def get_single_image_by_id(id: UUID, db: Session = Depends(get_db)):
     """
@@ -155,6 +174,20 @@ def update_image_details(
     id: UUID, payload: UpdateCoralImage, db: Session = Depends(get_db)
 ):
     return edit_image_details(db, id, payload)
+
+
+@router.patch("/corals/{id}/corals/publicity")
+def change_image_publicity(id: UUID, is_public: bool, db: Session = Depends(get_db)):
+    return change_coral_image_publicity(db, id, is_public)
+
+
+@router.patch("/user/{id}")
+def change_all_user_image_publicity(
+    id: UUID, payload: Settings, db: Session = Depends(get_db)
+):
+    return change_all_user_coral_image_publicity_status(
+        db, user_id=id, is_public=payload.is_public
+    )
 
 
 @router.delete("/id/{id}")

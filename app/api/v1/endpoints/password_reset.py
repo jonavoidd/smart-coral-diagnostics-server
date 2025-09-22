@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -38,7 +38,7 @@ async def send_password_request(
 
 
 @router.get("/")
-def validate_reset_token(payload: GetToken, db: Session = Depends(get_db)):
+def validate_reset_token(token: str = Query(...), db: Session = Depends(get_db)):
     """
     Validates a reset token to ensure it's valid for a password reset.
 
@@ -51,7 +51,7 @@ def validate_reset_token(payload: GetToken, db: Session = Depends(get_db)):
         RequestResponse: A response indicating whether the reset token is valid.
     """
 
-    return password_reset_service.validate_reset_token(payload, db)
+    return password_reset_service.validate_reset_token(token, db)
 
 
 @router.patch("/")

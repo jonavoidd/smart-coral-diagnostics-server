@@ -135,7 +135,19 @@ class UserService:
     ) -> Dict[str, str]:
         unique_filename = f"{uuid4()}_{original_filename}"
 
+        existing_user = self.get_user_by_id_service(db, id)
+
         try:
+            if existing_user and existing_user.profile:
+                old_filename = existing_user.profile
+
+                try:
+                    supabase.storage.from_("profile-pictures").remove([old_filename])
+                except Exception as e:
+                    logger.warning(
+                        f"{LOG_MSG} error deleting old profile picture from supabase: {str(e)}"
+                    )
+
             supabase.storage.from_("profile-pictures").upload(
                 unique_filename, file_bytes
             )
@@ -150,9 +162,7 @@ class UserService:
             unique_filename
         )
 
-        data = UpdateUser(profile=file_url)
-
-        user_crud.update_user_details(db, id, data)
+        user_crud.update_user_profile(db, id, file_url)
 
         audit = CreateAuditTrail(
             actor_id=user.id,
@@ -251,7 +261,9 @@ class UserService:
         hashed_pwd = Hasher.hash_password(payload.new_password)
         user_crud.change_password(db, id, hashed_pwd)
 
-        await email_service.send_password_changed_confirmation(user.email, user.name)
+        name = f"{user.first_name} {user.last_name}"
+
+        await email_service.send_password_changed_confirmation(user.email, name)
 
         audit = CreateAuditTrail(
             actor_id=user.id,

@@ -5,6 +5,7 @@ from uuid import UUID
 
 
 class BaseArchivedImages(BaseModel):
+    name: Optional[str] = None
     file_url: str
     filename: str
     original_upload_name: str
@@ -14,6 +15,7 @@ class BaseArchivedImages(BaseModel):
     water_depth: float
     uploaded_at: datetime
     confidence_score: Optional[float]
+    bleaching_percentage: Optional[float]
     classification_labels: Optional[str]
     model_version: Optional[str]
     description: Optional[str]

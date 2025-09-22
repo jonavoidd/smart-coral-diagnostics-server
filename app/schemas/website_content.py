@@ -6,6 +6,7 @@ from uuid import UUID
 
 class WebsiteContentBase(BaseModel):
     title: Optional[str] = None
+    section: Optional[str] = None
     content: Optional[str] = None
 
 
@@ -21,3 +22,6 @@ class WebsiteContentOut(WebsiteContentBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
