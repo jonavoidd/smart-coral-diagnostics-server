@@ -25,7 +25,7 @@ class UserBase(BaseModel):
     city: Optional[str] = None
     country: Optional[str] = None
 
-    birthdate: date
+    birthdate: Optional[date] = None
     bio: Optional[str] = None
     experience: Optional[str] = None
     diving_certification: Optional[str] = None

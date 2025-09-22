@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.crud.coral_images import get_all_images_with_results
+from app.crud.coral_images import get_public_images_with_results
 
 
 logger = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def trend_result(db: Session):
     try:
-        coral_images = get_all_images_with_results(db)
+        coral_images = get_public_images_with_results(db)
         if not coral_images:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="no coral data found"
@@ -30,6 +30,9 @@ def trend_result(db: Session):
         recent_images_count = 0
         recent_healthy = 0
         recent_bleached = 0
+
+        # Track all unique coordinates for easy access
+        all_coordinates = []
 
         locations = defaultdict(
             lambda: {
@@ -73,6 +76,11 @@ def trend_result(db: Session):
                 lat = round(image.latitude, 4)
                 lng = round(image.longitude, 4)
                 loc_key = f"{lat},{lng}"
+
+                # Add to all coordinates list if not already present
+                coord_tuple = (lat, lng)
+                if coord_tuple not in all_coordinates:
+                    all_coordinates.append(coord_tuple)
 
                 if loc_key not in locations:
                     locations[loc_key]["coordinates"] = {
@@ -158,6 +166,13 @@ def trend_result(db: Session):
                             "model_version": getattr(
                                 result, "model_version", "coral-classifier-v1.0"
                             ),
+                            # Include coordinates in analysis data
+                            "coordinates": (
+                                {"latitude": lat, "longitude": lng}
+                                if lat is not None and lng is not None
+                                else None
+                            ),
+                            "is_public": image.is_public,
                         }
 
                 # Count based on schema categories
@@ -275,6 +290,9 @@ def trend_result(db: Session):
         # Calculate combined bleached percentage (bleached + partially_bleached)
         total_bleached_percent = bleached_percent + partially_bleached_percent
 
+        # Get top 5 locations by health percentage for summary
+        top_locations = active_locations[:5] if active_locations else []
+
         result_data = {
             "total_images": total_images,
             "processed_images": processed_images,
@@ -297,9 +315,41 @@ def trend_result(db: Session):
                 "bleached": recent_bleached,
             },
             "active_locations": active_locations,
+            # New: Include all unique coordinates in a separate array for easy access
+            "all_coordinates": [
+                {"latitude": lat, "longitude": lng} for lat, lng in all_coordinates
+            ],
+            # New: Include coordinate summary
+            "coordinate_summary": {
+                "total_unique_coordinates": len(all_coordinates),
+                "coordinates_range": {
+                    "min_lat": (
+                        min(lat for lat, lng in all_coordinates)
+                        if all_coordinates
+                        else None
+                    ),
+                    "max_lat": (
+                        max(lat for lat, lng in all_coordinates)
+                        if all_coordinates
+                        else None
+                    ),
+                    "min_lng": (
+                        min(lng for lat, lng in all_coordinates)
+                        if all_coordinates
+                        else None
+                    ),
+                    "max_lng": (
+                        max(lng for lat, lng in all_coordinates)
+                        if all_coordinates
+                        else None
+                    ),
+                },
+            },
             "health_trend": (
                 "improving" if healthy_percent > total_bleached_percent else "declining"
             ),
+            # New: Include top locations by health
+            "top_locations_by_health": top_locations,
             "ai_model_mapping": {
                 "schema_categories": [
                     "healthy",
@@ -341,6 +391,7 @@ def trend_result(db: Session):
         logger.info(
             f"Classification breakdown: H={healthy_count}, B={bleached_count}, PB={partially_bleached_count}, U={uncertain_count}"
         )
+        logger.info(f"Coordinates found: {len(all_coordinates)} unique locations")
 
         return result_data
 

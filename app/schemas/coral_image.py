@@ -25,10 +25,12 @@ class PartialAnalysisResult(BaseModel):
 
 class BaseCoralImage(BaseModel):
     user_id: UUID
+    name: Optional[str] = None
     file_url: Optional[str] = None
     filename: Optional[str] = None
     original_upload_name: Optional[str] = None
     processed: Optional[bool] = False
+    is_public: Optional[bool] = True
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     water_temperature: Optional[str] = None
@@ -51,6 +53,7 @@ class CoralImageCreate(BaseCoralImage):
 class CoralImageOut(BaseCoralImage):
     id: UUID
     user: Optional[PartialUserData] = None
+    name: Optional[str] = None
     analysis_results: Optional[List[PartialAnalysisResult]] = []
 
     class Config:

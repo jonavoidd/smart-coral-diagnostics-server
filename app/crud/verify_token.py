@@ -38,6 +38,10 @@ def store_verification_token(
 
 
 def get_verification_token(db: Session, token: str) -> Optional[VerificationToken]:
+    """
+    Get a verification token by token string.
+    Only validates the token exists and hasn't expired - does NOT verify the user.
+    """
     query = select(VerificationToken).where(
         and_(
             VerificationToken.token == token,
@@ -48,26 +52,47 @@ def get_verification_token(db: Session, token: str) -> Optional[VerificationToke
 
     try:
         result = db.execute(query)
-        token = result.scalar_one_or_none()
+        verification_token = result.scalar_one_or_none()
 
-        if token is None:
-            logger.info(f"{LOG_MSG} token is expired")
+        if verification_token is None:
+            logger.info(f"{LOG_MSG} token not found, expired, or already used")
             return None
 
-        success = verify_user(db, token.user_id)
+        logger.info(
+            f"{LOG_MSG} valid verification token found for user {verification_token.user_id}"
+        )
+        return verification_token
+    except SQLAlchemyError as e:
+        logger.error(f"{LOG_MSG} error getting verification token: {str(e)}")
+        raise
+
+
+def verify_token_and_mark_used(
+    db: Session, verification_token: VerificationToken
+) -> bool:
+    try:
+        success = verify_user(db, verification_token.user_id)
+
         if success:
             db.execute(
                 update(VerificationToken)
-                .where(VerificationToken.id == token.id)
+                .where(VerificationToken.id == verification_token.id)
                 .values(used_at=datetime.now(timezone.utc))
             )
             db.commit()
-
-        return token if success else None
+            logger.info(
+                f"{LOG_MSG} user {verification_token.user_id} verified and token marked as used."
+            )
+            return True
+        else:
+            logger.error(
+                f"{LOG_MSG} user failed to verify user {verification_token.user_id}."
+            )
+            return False
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"{LOG_MSG} error getting verification token: {str(e)}")
-        raise
+        logger.error(f"{LOG_MSG} error verifying user and marking token: {str(e)}")
+        return False
 
 
 def verify_user(db: Session, id: UUID) -> bool:
@@ -97,8 +122,14 @@ def cleanup_user_verification_token(db: Session, id: UUID) -> bool:
     )
 
     try:
-        db.execute(query)
+        result = db.execute(query)
+        deleted_count = result.rowcount
         db.commit()
+
+        if deleted_count:
+            logger.info(
+                f"{LOG_MSG} cleaned up {deleted_count} verifications tokens found for user {id}"
+            )
 
         return True
     except SQLAlchemyError as e:
@@ -116,9 +147,13 @@ def cleanup_verification_tokens(db: Session) -> bool:
     )
 
     try:
-        db.execute(query)
+        result = db.execute(query)
+        deleted_count = result.rowcount
         db.commit()
 
+        logger.info(
+            f"{LOG_MSG} cleaned up {deleted_count} expired/used verification tokens."
+        )
         return True
     except SQLAlchemyError as e:
         db.rollback()

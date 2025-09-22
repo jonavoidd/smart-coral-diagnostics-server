@@ -46,7 +46,7 @@ class User(Base):
     country = Column(String(150), nullable=True)
 
     # profile fields
-    birthdate = Column(Date, nullable=False)
+    birthdate = Column(Date, nullable=True)
     bio = Column(String(500), nullable=True)
     experience = Column(String(50), nullable=True)
     diving_certification = Column(String(100), nullable=True)

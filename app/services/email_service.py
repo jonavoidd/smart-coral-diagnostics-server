@@ -6,7 +6,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from jinja2 import Template
 from typing import Optional, List
-from urllib.parse import quote
 from premailer import transform
 
 from app.core.config import settings
@@ -332,8 +331,8 @@ class EmailService:
         """
         subject = "Email Confirmation"
 
-        # URL encode the verification link to handle special characters
-        safe_verification_url = quote(verification_url, safe=":/")
+        # Use the verification URL as-is since it's already properly formatted
+        safe_verification_url = verification_url
 
         # HTML template with table-based layout and inline CSS
         html_template = """

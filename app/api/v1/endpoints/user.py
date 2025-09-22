@@ -189,11 +189,14 @@ def delete_user(
     return user_delete
 
 
-@router.patch("/me/password")
+@router.patch("/me/password/{id}")
 async def update_password(
+    id: UUID,
     payload: PasswordChangeRequest,
     db: Session = Depends(get_db),
-    current_user: UserOut = Depends(require_role([UserRole.USER])),
+    current_user: UserOut = Depends(
+        require_role([UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ),
 ):
     """
     Updates the password of the user with the given ID.

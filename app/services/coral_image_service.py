@@ -4,7 +4,7 @@ import markdown
 from datetime import datetime, timezone
 from fastapi import UploadFile, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import uuid4, UUID
 
 from app.core.supabase_client import supabase
@@ -14,14 +14,19 @@ from app.crud.coral_images import (
     store_coral_image,
     get_all_images,
     get_all_images_with_results,
+    get_public_images_with_results,
     get_coral_location,
     get_images_by_user,
+    get_all_images_by_user,
     get_image_by_id,
     update_image_details,
+    change_coral_image_public_status,
+    change_all_user_coral_image_status,
     delete_image,
     delete_selected_images,
     log_analytics_event,
 )
+from app.crud.user import get_user_by_id
 from app.schemas.archived_image import CreateArchivedImage
 from app.schemas.audit_trail import CreateAuditTrail
 from app.schemas.coral_image import CoralImageCreate, CoralImageOut, UpdateCoralImage
@@ -38,12 +43,14 @@ LOG_MSG = "Service:"
 def upload_image_to_supabase_service(
     db: Session,
     file_bytes: bytes,
+    name: str,
     original_filename: str,
     latitude: float,
     longitude: float,
     water_temperature: str,
     water_depth: float,
     observation_date: datetime,
+    is_public: bool,
     user: UserOut,
 ):
     unique_filename = f"{uuid4()}_{original_filename}"
@@ -61,6 +68,7 @@ def upload_image_to_supabase_service(
 
     image_data = CoralImageCreate(
         user_id=user.id,
+        name=name,
         file_url=file_url,
         filename=unique_filename,
         original_upload_name=original_filename,
@@ -69,6 +77,7 @@ def upload_image_to_supabase_service(
         longitude=longitude,
         water_temperature=water_temperature,
         water_depth=water_depth,
+        is_public=is_public,
         observatiton_date=observation_date,
         uploaded_at=datetime.now(timezone.utc),
     )
@@ -193,7 +202,25 @@ def get_all_coral_data(db: Session) -> List[CoralImageOut]:
         logger.error(f"{LOG_MSG} error getting all coral data: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="gettin coral data failed",
+            detail="getting coral data failed.",
+        )
+
+
+def get_public_coral_data(db: Session) -> List[CoralImageOut]:
+    try:
+        data = get_public_images_with_results(db)
+
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="no data found"
+            )
+
+        return data
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error getting all public data: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="getting public coral data failed.",
         )
 
 
@@ -223,6 +250,26 @@ def get_image_for_user_service(db: Session, id: UUID):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="getting images failed",
+        )
+
+
+def get_all_images_by_user_service(
+    db: Session, id: UUID
+) -> Optional[List[CoralImageOut]]:
+    try:
+        images = get_all_images_by_user(db, id)
+
+        if not images:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="no image by user found"
+            )
+
+        return images
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error getting images uploaded by user: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="failed to get all images by user",
         )
 
 
@@ -260,6 +307,46 @@ def edit_image_details(db: Session, id: UUID, payload: UpdateCoralImage):
         )
 
 
+def change_coral_image_publicity(db: Session, id: UUID, is_public: bool):
+    try:
+        existing = get_image_by_id(db, id)
+
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="image not found"
+            )
+
+        return change_coral_image_public_status(db, id, is_public)
+    except Exception as e:
+        logger.error(f"{LOG_MSG} error updating image publicity status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="failed to update image publicity status",
+        )
+
+
+def change_all_user_coral_image_publicity_status(
+    db: Session, user_id: UUID, is_public: bool
+):
+    try:
+        existing_user = get_user_by_id(db, user_id)
+
+        if not existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+            )
+
+        return change_all_user_coral_image_status(db, user_id, is_public)
+    except Exception as e:
+        logger.error(
+            f"{LOG_MSG} error updating all image publicity status uploaded by user: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="failed to change all coral image publicity status.",
+        )
+
+
 def delete_single_image_service(db: Session, id: UUID, user: UserOut):
     image = get_image_by_id(db, id)
     if not image:
@@ -282,6 +369,7 @@ def delete_single_image_service(db: Session, id: UUID, user: UserOut):
             water_depth=image.water_depth,
             uploaded_at=image.uploaded_at,
             confidence_score=analysis.confidence_score if analysis else None,
+            bleaching_percentage=analysis.bleaching_percentage if analysis else None,
             classification_labels=analysis.classification_labels if analysis else None,
             model_version=analysis.model_version if analysis else None,
             description=analysis.model_version if analysis else None,
