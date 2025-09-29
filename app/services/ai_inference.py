@@ -119,12 +119,13 @@ class CoralBleachingModel(nn.Module):
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 checkpoint = torch.load(googlenet_model, map_location=device, weights_only=False)
+state_dict = checkpoint["model_state_dict"]
 
 num_classes = checkpoint["num_classes"]
 class_names = checkpoint["class_names"]
 
-model = CoralBleachingModel(num_classes=5, pretrained=False)
-model.load_state_dict(checkpoint["model_state_dict"])
+model = CoralBleachingModel(num_classes=6, pretrained=False)
+model.load_state_dict(state_dict, strict=False)
 model.eval()
 model = model.to(device)
 
