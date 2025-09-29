@@ -11,9 +11,6 @@ from app.api.v1.endpoints import (
     trend,
     user,
     website_content,
-    alert_subscriptions,
-    public_alerts,
-    websocket_alerts,
 )
 
 api_router = APIRouter()
@@ -35,12 +32,3 @@ api_router.include_router(
     website_content.router, prefix="/admin/website-content", tags=["Website Content"]
 )
 api_router.include_router(dev_test.router, prefix="/dev", tags=["Developer Routes"])
-api_router.include_router(
-    alert_subscriptions.router, prefix="/alerts", tags=["Alert Subscriptions"]
-)
-api_router.include_router(
-    public_alerts.router, prefix="/public", tags=["Public Alerts"]
-)
-api_router.include_router(
-    websocket_alerts.router, prefix="/ws", tags=["WebSocket Alerts"]
-)

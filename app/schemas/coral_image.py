@@ -21,7 +21,6 @@ class PartialAnalysisResult(BaseModel):
     analyzed_at: datetime
     description: Optional[str]
     recommendations: Optional[str]
-    model_version: Optional[str]
 
 
 class BaseCoralImage(BaseModel):

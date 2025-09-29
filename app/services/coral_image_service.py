@@ -360,7 +360,6 @@ def delete_single_image_service(db: Session, id: UUID, user: UserOut):
         analysis = image.analysis_results[0] if image.analysis_results else None
 
         archived_payload = CreateArchivedImage(
-            name=image.name,
             file_url=image.file_url,
             filename=image.filename,
             original_upload_name=image.original_upload_name,
