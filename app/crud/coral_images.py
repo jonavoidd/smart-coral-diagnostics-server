@@ -112,9 +112,7 @@ def get_all_images_with_results(db: Session) -> Optional[List[CoralImageOut]]:
             img
             for img in images
             if any(
-                result.confidence_score is not None
-                and result.confidence_score > 0.50
-                and result.classification_labels != "not corals"
+                result.confidence_score is not None and result.confidence_score > 0.50
                 for result in img.analysis_results
             )
         ]
@@ -141,9 +139,7 @@ def get_public_images_with_results(db: Session) -> Optional[List[CoralImageOut]]
             img
             for img in images
             if any(
-                result.confidence_score is not None
-                and result.confidence_score > 0.50
-                and result.classification_labels != "not corals"
+                result.confidence_score is not None and result.confidence_score > 0.50
                 for result in img.analysis_results
             )
         ]
