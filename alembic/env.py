@@ -13,6 +13,7 @@ from app.models import (
     analytics_events,
     archived_images,
     audit_trail,
+    bleaching_alerts,
     coral_images,
     password_reset_tokens,
     terms_agreements,
