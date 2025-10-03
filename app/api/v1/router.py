@@ -4,6 +4,7 @@ from app.api.v1.endpoints import (
     archived_image,
     audit_trail,
     auth,
+    bleaching_alert,
     coral_image,
     dev_test,
     password_reset,
@@ -21,6 +22,9 @@ api_router.include_router(
 )
 api_router.include_router(audit_trail.router, prefix="/audit", tags=["Audit Trails"])
 api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
+api_router.include_router(
+    bleaching_alert.router, prefix="/alerts", tags=["Bleaching Alerts"]
+)
 api_router.include_router(
     coral_image.router, prefix="/coral-image", tags=["Coral Image"]
 )

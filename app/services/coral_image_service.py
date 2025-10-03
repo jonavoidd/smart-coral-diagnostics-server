@@ -33,6 +33,7 @@ from app.schemas.coral_image import CoralImageCreate, CoralImageOut, UpdateCoral
 from app.schemas.user import UserOut
 from app.services.ai_inference import run_inference, run_llm_inference
 from app.services.audit_trail_service import audit_trail_service
+from app.services.bleaching_alert_service import bleaching_alert_service
 
 logger = logging.getLogger(__name__)
 LOG_MSG = "Service:"
@@ -144,6 +145,31 @@ def upload_image_to_supabase_service(
             description=f"user with the email '{user.email}' used the service to analyze a coral image",
         )
         audit_trail_service.insert_audit(db, audit)
+
+        if (
+            result_data["classification_labels"]
+            in [
+                "polar_white_bleaching",
+                "polar white bleaching",
+                "slight_pale_bleaching",
+                "slight pale bleaching",
+                "very_pale_bleaching",
+                "very pale bleaching",
+            ]
+            and result_data["bleaching_percentage"] >= 30.0
+        ):
+            try:
+                bleaching_alert_service.generate_alerts(
+                    db,
+                    min_bleached_count=200,
+                    cluster_radius_km=50.0,
+                    regenerate_existing=False,
+                )
+                logger.info(
+                    f"{LOG_MSG} checked/updated bleaching alerts for new images."
+                )
+            except Exception as e:
+                logger.warning(f"{LOG_MSG} failed to udpate alerts: {str(e)}")
 
         return {
             "message": "image processed successfully",
