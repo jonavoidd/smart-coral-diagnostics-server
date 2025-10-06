@@ -12,8 +12,8 @@ from pathlib import Path
 from PIL import Image
 import torch
 from torch import nn
-from torchvision import models, transforms
-from torchvision.models import resnet50, ResNet50_Weights, googlenet, GoogLeNet_Weights
+from torchvision import transforms
+from torchvision.models import googlenet, GoogLeNet_Weights
 from transformers import pipeline
 from typing import Dict
 
@@ -26,6 +26,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # coral_classification_model = BASE_DIR / "ai_model" / "coral_classification_model.pt"
 googlenet_model = BASE_DIR / "ai_model" / "coral_classification_model_googlenet.pt"
 
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+transform = transforms.Compose(
+    [
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+
+model = None
+class_names = None
 model_version = "coral-classification-v3-googlenet"
 
 
@@ -75,6 +87,24 @@ class CoralBleachingModel(nn.Module):
         return class_output, bleaching_output
 
 
+def load_model():
+    global model, class_names
+    if model is None:
+        checkpoint = torch.load(
+            "app/ai_model/coral_classification_model_googlenet.pt", map_location=device
+        )
+        model = CoralBleachingModel(
+            num_classes=checkpoint["num_classes"], pretrained=False
+        )
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        model.eval()
+        model.to(device)
+        class_names = checkpoint["class_names"]
+        print("✅ Model loaded successfully.")
+
+    return model, class_names
+
+
 # class CoralBleachingModel(nn.Module):
 #     """ResNet50-based model for coral bleaching detection with classification and regression outputs."""
 
@@ -117,40 +147,16 @@ class CoralBleachingModel(nn.Module):
 #         return class_output, bleaching_output
 
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-checkpoint = torch.load(googlenet_model, map_location=device, weights_only=False)
-state_dict = checkpoint["model_state_dict"]
+# checkpoint = torch.load(googlenet_model, map_location=device, weights_only=False)
+# state_dict = checkpoint["model_state_dict"]
 
-num_classes = checkpoint["num_classes"]
-class_names = checkpoint["class_names"]
+# num_classes = checkpoint["num_classes"]
+# class_names = checkpoint["class_names"]
 
-model = CoralBleachingModel(num_classes=6, pretrained=False)
-model.load_state_dict(state_dict, strict=False)
-model.eval()
-model = model.to(device)
-
-transform = transforms.Compose(
-    [
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
-
-
-# MODEL_ID = f"{settings.HF_USERNAME}/{settings.HF_MODEL_NAME}"
-
-
-# device = 0 if torch.cuda.is_available() else -1
-# model = pipeline("image-classification", model=MODEL_ID, device=device)
-
-
-# LABEL_MAP = {
-#     "51_tabular_hard_coral": "Tabular Hard Coral",
-#     "polar white bleaching": "Polar White Bleaching",
-#     "slight pale bleaching": "Slight Pale Bleaching",
-#     "very pale bleaching": "Very Pale Bleaching",
-# }
+# model = CoralBleachingModel(num_classes=6, pretrained=False)
+# model.load_state_dict(state_dict, strict=False)
+# model.eval()
+# model = model.to(device)
 
 
 def run_inference(image_path: str) -> Dict:
