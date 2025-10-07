@@ -56,6 +56,8 @@ class Settings(BaseSettings):
 
     REDIS_URL: str
 
+    TRANSACTION_POOLER: str
+
     class config:
         case_sensitive = True
 
