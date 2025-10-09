@@ -113,15 +113,13 @@ def login(
             }
         )
 
-        is_secure = ENV == "production"
-        same_site_value = "none" if is_secure else "lax"
-
         response.set_cookie(
             key="access_token",
             value=access_token,
             httponly=True,
             secure=True,
             samesite="none",
+            domain="smart-coral-diagnostics.vercel.app",
             path="/",
             max_age=3600,
         )
