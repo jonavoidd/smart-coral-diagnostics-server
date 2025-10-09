@@ -32,6 +32,15 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 LOG_MSG = "Endpoint:"
 
+ENV = settings.ENV
+
+if ENV == "development":
+    frontend_url = settings.FRONTEND_URL
+    backend_url = settings.BACKEND_URL
+else:
+    frontend_url = settings.PROD_FRONTEND_URL
+    backend_url = settings.PROD_BACKEND_URL
+
 
 @router.post("/token")
 def login(
@@ -104,12 +113,15 @@ def login(
             }
         )
 
+        is_secure = ENV == "production"
+        same_site_value = "none" if is_secure else "lax"
+
         response.set_cookie(
             key="access_token",
             value=access_token,
             httponly=True,
-            secure=False,
-            samesite="lax",
+            secure=is_secure,
+            samesite=same_site_value,
             path="/",
             max_age=3600,
         )
@@ -199,7 +211,9 @@ async def signup(user_data: CreateUser, db: Session = Depends(get_db)):
                 detail="Failed to store verification token",
             )
 
-        verification_url = f"{settings.BACKEND_URL}/api/v1/auth/verify-email?token={verification_token}"
+        verification_url = (
+            f"{backend_url}/api/v1/auth/verify-email?token={verification_token}"
+        )
 
         name = f"{user_data.first_name} {user_data.last_name or ''}".strip()
         await send_verification_email(
@@ -345,7 +359,6 @@ async def social_callback(
         )
 
         # frontend_url = f"http://localhost:8000/api/v1/auth/callback?token={access_token}&name={user.name}&email={user.email}"
-        frontend_url = f"http://localhost:3000"
         response = RedirectResponse(frontend_url)
         response.set_cookie(
             key="access_token",
@@ -372,21 +385,15 @@ def verify_email(token: str, db: Session = Depends(get_db)):
         verification_token = get_verification_token(db, token)
 
         if not verification_token:
-            return RedirectResponse(
-                f"{settings.FRONTEND_URL}/verify-email?status=failed"
-            )
+            return RedirectResponse(f"{frontend_url}/verify-email?status=failed")
 
         # Actually verify the user and mark the token as used
         success = verify_token_and_mark_used(db, verification_token)
 
         if not success:
-            return RedirectResponse(
-                f"{settings.FRONTEND_URL}/verify-email?status=failed"
-            )
+            return RedirectResponse(f"{frontend_url}/verify-email?status=failed")
 
-        return RedirectResponse(
-            f"{settings.FRONTEND_URL}/verify-email?status=succeeded"
-        )
+        return RedirectResponse(f"{frontend_url}/verify-email?status=succeeded")
     except Exception as e:
         logger.error(f"{LOG_MSG} error verifying email: {str(e)}")
         raise HTTPException(

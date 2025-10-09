@@ -91,7 +91,9 @@ def load_model():
     global model, class_names
     if model is None:
         checkpoint = torch.load(
-            "app/ai_model/coral_classification_model_googlenet.pt", map_location=device
+            "app/ai_model/coral_classification_model_googlenet.pt",
+            map_location=device,
+            weights_only=False,
         )
         model = CoralBleachingModel(
             num_classes=checkpoint["num_classes"], pretrained=False
@@ -160,6 +162,11 @@ def load_model():
 
 
 def run_inference(image_path: str) -> Dict:
+    global model, class_names
+
+    if model is None:
+        load_model()
+
     start_time = time.time()
     try:
         if image_path.startswith("http://") or image_path.startswith("https://"):
