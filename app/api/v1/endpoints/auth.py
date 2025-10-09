@@ -120,8 +120,8 @@ def login(
             key="access_token",
             value=access_token,
             httponly=True,
-            secure=is_secure,
-            samesite=same_site_value,
+            secure=True,
+            samesite="none",
             path="/",
             max_age=3600,
         )
@@ -234,8 +234,8 @@ async def signup(user_data: CreateUser, db: Session = Depends(get_db)):
             key="access_token",
             value=access_token,
             httponly=True,
-            secure=False,
-            samesite="lax",
+            secure=True,
+            samesite="none",
         )
         return response
     except Exception as e:
@@ -404,5 +404,7 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 
 @router.post("/logout")
 def logout(response: Response):
-    response.delete_cookie("access_token", path="/")
+    response.delete_cookie(
+        key="access_token", httponly=True, secure=True, samesite="none", path="/"
+    )
     return {"message": "logged out"}
