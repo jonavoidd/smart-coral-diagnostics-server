@@ -9,9 +9,12 @@ load_dotenv(dotenv_path=env_path)
 
 
 class Settings(BaseSettings):
+    ENV: str
     APP_NAME: str
     FRONTEND_URL: str
     BACKEND_URL: str
+    PROD_FRONTEND_URL: str
+    PROD_BACKEND_URL: str
 
     SUPABASE_URL: str
     SUPABASE_SERVICE_ROLE_KEY: str

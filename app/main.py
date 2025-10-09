@@ -9,14 +9,20 @@ from app.api.v1.router import api_router
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.schemas.user import UserOut
+from app.services.ai_inference import load_model
 
 logger = logging.getLogger(__name__)
+
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000", "https://smart-coral-diagnostics.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "https://smart-coral-diagnostics.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
