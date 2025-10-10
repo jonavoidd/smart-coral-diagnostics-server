@@ -1,3 +1,4 @@
+import json
 import logging
 import secrets
 
@@ -96,6 +97,12 @@ def login(
             "last_name": user.last_name,
         }
 
+        auth_data = {
+            "user_id": str(user.id),
+            "is_verified": user.is_verified,
+            "role": user.role,
+        }
+
         modify_last_login(db, user.id)
 
         access_token = TokenSecurity.create_access_token(
@@ -122,6 +129,16 @@ def login(
             path="/",
             max_age=3600,
         )
+        response.set_cookie(
+            key="auth_state",
+            value=json.dumps(auth_data),
+            httponly=False,
+            secure=True,
+            samesite="none",
+            path="/",
+            max_age=3600,
+        )
+
         return response
     except Exception as e:
         logger.error(f"{LOG_MSG} error upon signin: {str(e)}")
