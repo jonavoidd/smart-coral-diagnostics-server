@@ -120,7 +120,6 @@ def login(
             secure=True,
             samesite="none",
             path="/",
-            domain=".smart-coral-diagnostics.vercel.app",
             max_age=3600,
         )
         return response
