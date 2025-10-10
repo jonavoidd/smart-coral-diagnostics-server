@@ -97,12 +97,6 @@ def login(
             "last_name": user.last_name,
         }
 
-        auth_data = {
-            "user_id": str(user.id),
-            "is_verified": user.is_verified,
-            "role": user.role,
-        }
-
         modify_last_login(db, user.id)
 
         access_token = TokenSecurity.create_access_token(
@@ -124,15 +118,6 @@ def login(
             key="access_token",
             value=access_token,
             httponly=True,
-            secure=True,
-            samesite="none",
-            path="/",
-            max_age=3600,
-        )
-        response.set_cookie(
-            key="auth_state",
-            value=json.dumps(auth_data),
-            httponly=False,
             secure=True,
             samesite="none",
             path="/",
