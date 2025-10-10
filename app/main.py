@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -27,7 +28,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET)
 
 app.include_router(api_router, prefix="/api/v1")
 
