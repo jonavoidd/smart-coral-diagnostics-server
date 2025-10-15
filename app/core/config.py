@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     MAIL_USE_TLS: bool = True
     MAIL_USE_SSL: bool = False
 
+    SENDGRID_API_KEY: str
+    SENDGRID_FROM_EMAIL: str
+    SENDGRID_FROM_NAME: str
+
     BLEACHING_MODEL_NAME: str = "microsoft/resnet-50"
     BLEACHING_MODEL_CACHE_DIR: str = "./models_cache"
     BLEACHING_CONFIDENCE_THRESHOLD: float = 0.7
