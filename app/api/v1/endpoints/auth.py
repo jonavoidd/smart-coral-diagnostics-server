@@ -119,7 +119,7 @@ def login(
             value=access_token,
             httponly=True,
             secure=True,
-            samesite="lax",
+            samesite="none",
             path="/",
             max_age=3600,
         )
