@@ -1,27 +1,89 @@
 import aiosmtplib
+import base64
+import httpx
 import logging
+import os
+
 
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from jinja2 import Template
-from typing import Optional, List
 from premailer import transform
+from typing import Optional, List
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+LOG_MSG = "Service:"
+SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
 
 
 class EmailService:
     def __init__(self):
-        self.smtp_server = settings.MAIL_SERVER
-        self.smtp_port = settings.MAIL_PORT
-        self.smtp_username = settings.MAIL_USERNAME
-        self.smtp_password = settings.MAIL_PASSWORD
-        self.from_email = settings.MAIL_FROM
-        self.from_name = settings.MAIL_FROM_NAME
-        self.use_tls = settings.MAIL_USE_TLS
+        self.api_key = settings.SENDGRID_API_KEY
+        self.from_email = settings.SENDGRID_FROM_EMAIL
+        self.from_name = settings.SENDGRID_FROM_NAME
+
+        if not self.api_key:
+            logger.warning(f"{LOG_MSG} Sendgrid API key is not set. Emails will fail.")
+
+        # self.smtp_server = settings.MAIL_SERVER
+        # self.smtp_port = settings.MAIL_PORT
+        # self.smtp_username = settings.MAIL_USERNAME
+        # self.smtp_password = settings.MAIL_PASSWORD
+        # self.from_email = settings.MAIL_FROM
+        # self.from_name = settings.MAIL_FROM_NAME
+        # self.use_tls = settings.MAIL_USE_TLS
+
+    async def _send_via_sendgrid(
+        self,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: Optional[str] = None,
+        to_name: Optional[str] = None,
+    ):
+        """Sends an email via Sendgrid's API over https"""
+
+        if not self.api_key:
+            raise RuntimeError("Missing SendGrid API Key")
+
+        payload = {
+            "personalizations": [
+                {
+                    "to": [{"email": to_email, "name": to_name or to_email}],
+                    "subject": subject,
+                }
+            ],
+            "from": {"email": self.from_email, "from": self.from_name},
+            "content": [
+                {"type": "text/plain", "value": text_content or ""},
+                {"type": "text/html", "value": html_content},
+            ],
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                response = await client.post(
+                    SENDGRID_API_URL, json=payload, headers=headers
+                )
+                if response.status_code in (200, 202):
+                    logger.info(f"{LOG_MSG} Email successfully sent to {to_email}")
+                    return True
+                else:
+                    logger.error(
+                        f"{LOG_MSG} SendGrid error {response.status_code}: {response.text}"
+                    )
+                    return False
+            except Exception as e:
+                logger.error(f"{LOG_MSG} server error sending email to {to_email}.")
+                return False
 
     async def send_email(
         self,
@@ -31,34 +93,39 @@ class EmailService:
         text_content: Optional[str] = None,
         to_name: Optional[str] = None,
     ) -> bool:
-        try:
-            message = MIMEMultipart("alternative")
-            message["Subject"] = subject
-            message["From"] = f"{self.from_name} <{self.from_email}>"
-            message["To"] = f"{to_name} <{to_email}>" if to_name else to_email
 
-            if text_content:
-                text_part = MIMEText(text_content, "plain")
-                message.attach(text_part)
+        return await self._send_via_sendgrid(
+            to_email, subject, html_content, text_content, to_name
+        )
 
-            html_part = MIMEText(html_content, "html")
-            message.attach(html_part)
+        # try:
+        #     message = MIMEMultipart("alternative")
+        #     message["Subject"] = subject
+        #     message["From"] = f"{self.from_name} <{self.from_email}>"
+        #     message["To"] = f"{to_name} <{to_email}>" if to_name else to_email
 
-            await aiosmtplib.send(
-                message,
-                hostname=self.smtp_server,
-                port=self.smtp_port,
-                username=self.smtp_username,
-                password=self.smtp_password,
-                start_tls=self.use_tls,
-            )
+        #     if text_content:
+        #         text_part = MIMEText(text_content, "plain")
+        #         message.attach(text_part)
 
-            logger.info(f"Service: Email send successfully to {to_email}")
-            return True
+        #     html_part = MIMEText(html_content, "html")
+        #     message.attach(html_part)
 
-        except Exception as e:
-            logger.error(f"Service: Failed to send email to {to_email}: {str(e)}")
-            return False
+        #     await aiosmtplib.send(
+        #         message,
+        #         hostname=self.smtp_server,
+        #         port=self.smtp_port,
+        #         username=self.smtp_username,
+        #         password=self.smtp_password,
+        #         start_tls=self.use_tls,
+        #     )
+
+        #     logger.info(f"Service: Email send successfully to {to_email}")
+        #     return True
+
+        # except Exception as e:
+        #     logger.error(f"Service: Failed to send email to {to_email}: {str(e)}")
+        #     return False
 
     async def send_password_reset_email(
         self, email: str, name: str, reset_url: str, expires_mins: int
