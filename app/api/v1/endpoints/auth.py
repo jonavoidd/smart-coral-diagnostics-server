@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from urllib.parse import quote_plus
 
 from app.core.config import settings
 from app.core.oauth import oauth
@@ -357,8 +358,12 @@ async def social_callback(
             user.email, user_data=user_data
         )
 
+        encoded_token = quote_plus(access_token)
+
         # frontend_url = f"http://localhost:8000/api/v1/auth/callback?token={access_token}&name={user.name}&email={user.email}"
-        response = RedirectResponse(frontend_url)
+        response = RedirectResponse(
+            f"{frontend_url}/api/v1/auth/callback?token={encoded_token}&name={user.first_name}%20{user.last_name}&email={user.email}"
+        )
         response.set_cookie(
             key="access_token",
             value=access_token,
